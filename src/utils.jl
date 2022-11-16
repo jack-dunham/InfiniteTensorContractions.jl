@@ -24,7 +24,7 @@ function nswap(k::Int, n::Int, p::NTuple{N}) where {N}
     if k == n
         return p
     elseif n > k
-        return (p[1:(k - 1)]..., p[(k+1):n]..., p[k]..., p[(n+1):N]...)::typeof(p)
+        return (p[1:(k - 1)]..., p[(k + 1):n]..., p[k]..., p[(n + 1):N]...)::typeof(p)
     else
         return (p[1:(n - 1)]..., p[k], p[n:(k - 1)]..., p[(k + 1):N]...)::typeof(p)
     end
@@ -147,7 +147,6 @@ function _get_sitespace(A::Matrix{<:TensorMap{S}}; conj=false) where {S<:IndexSp
 end
 
 function _tensorize(A::Matrix{<:TensorMap{S}}; conj=false) where {S<:GradedSpace}
-    
     sp = _get_sitespace(A; conj=conj)
 
     t = similar(A[1, 1], codomain(A[1, 1]), domain(A[1, 1]) * sp)
@@ -160,7 +159,6 @@ function _tensorize(A::Matrix{<:TensorMap{S}}; conj=false) where {S<:GradedSpace
     return t
 end
 function _tensorize(A::Matrix{<:TensorMap{S}}; conj=false) where {S<:ComplexSpace}
-
     sp = _get_sitespace(A; conj=conj)
 
     c = blocks.(A)
@@ -170,7 +168,6 @@ function _tensorize(A::Matrix{<:TensorMap{S}}; conj=false) where {S<:ComplexSpac
 
     return t
 end
-
 
 function Base.convert(::Type{TensorMap}, A::Vector{<:TensorMap})
     return listten2ten(A)
@@ -229,8 +226,6 @@ function getsite(t::TensorMap{<:IndexSpace,N₁,N₂}, x::Int, y::Int) where {N�
     return permute(tpp, NTuple{N₁,Int64}(1:N₁), NTuple{N₂ - 2,Int64}((N₁ + 1):(N - 2)))
 end
 
-function slice(
-    ind::NTuple{N,Int}, sp::ProductSpace{S,N₁}
-) where {N,N₁,S<:IndexSpace}
-    return *(one(S),one(S),(sp[i] for i in ind)...)
+function slice(ind::NTuple{N,Int}, sp::ProductSpace{S,N₁}) where {N,N₁,S<:IndexSpace}
+    return *(one(S), one(S), (sp[i] for i in ind)...)
 end
