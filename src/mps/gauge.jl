@@ -2,10 +2,11 @@
 function leftgauge!(
     AL::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
     L::AbstractOnLattice{U,<:AbstractTensorMap{S,1,1}},
-    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
+    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}};
     tol=1e-12,
     maxiter=100,
-) where {U<:UnitCell,S}
+    verbose=false
+) where {U,S}
     numsites = length(A)
     r = 1:numsites
 
@@ -15,8 +16,8 @@ function leftgauge!(
     normalize!(L[end])
 
     λ = zeros(numsites)
-
     ϵ = zeros(numsites)
+
     ϵ[end] = 2 * tol
 
     T = multi_transfer(A, A)
@@ -46,7 +47,7 @@ function leftgauge!(
         ϵ[x] = norm(Lold - L[x])
     end
 
-    println(ϵ)
+    verbose && @info "\t error: $ϵ"
 
     while numiter < maxiter && max(ϵ...) > tol
         for x in r
@@ -59,7 +60,7 @@ function leftgauge!(
             ϵ[x] = norm(Lold - L[x])
         end
 
-        println(ϵ)
+        verbose && @info "\t error: $ϵ"
         numiter += 1
     end
     return AL, L, λ
@@ -67,9 +68,9 @@ end
 function rightgauge!(
     AR::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
     R::AbstractOnLattice{U,<:AbstractTensorMap{S,1,1}},
-    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
+    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}};
     kwargs...,
-) where {U<:UnitCell,S}
+) where {U,S}
     # Permute left and right bonds
     AL = permute.(AR, Ref((3, 2)), Ref((1,)))
     L = permute.(R, Ref((2,)), Ref((1,)))
@@ -84,36 +85,50 @@ function rightgauge!(
     return AR, R, λ
 end
 
-function mixedgauge(A::AbstractOnLattice{<:AbstractLattice,<:AbsTen{2,1}})
-    C = TensorMap.(rand, numbertype(A), eastbond(A), westbond(A))
-    return mixedgauge(A, C)
+# Find the mixedguage of uniform MPS A, writing result into AL,C,AR
+function mixedgauge!(AL,C,AR,A; verbose=false, kwargs...)
+    C0 = deepcopy(C)
+    for y in axes(A, 2)
+        verbose && @info "Gauging right..."
+        rightgauge!(lview(AR,:,y), lview(C,:,y), lview(A,:,y); verbose=verbose, kwargs...)
+        verbose && @info "Gauging left..."
+        leftgauge!(lview(AL,:,y), lview(C,:,y), lview(AR,:,y); verbose=verbose, kwargs...)
+    end
+    # currently not working 
+    # diagonalise!(AL,C,AR)
+    return AL,C,AR
 end
-function mixedgauge(
-    A::AbstractOnLattice{L,<:AbstractTensor{S,2,1}},
-    C0::AbstractOnLattice{L,<:AbstractTensor{S,1,1}},
-) where {L,S}
-    C = deepcopy(C0)
-    AL, _, _ = leftgauge!(similar.(A), C, A)
-    AR, C, _ = rightgauge!(similar.(A), C, AL)
-    diagonalise!(AL, C, AR)
-    return AL, C, AR
-end
+
+# function mixedgauge(A::AbstractOnLattice{<:AbstractLattice,<:AbsTen{2,1}})
+#     C = TensorMap.(rand, ComplexF64, eastbond.(A), westbond.(A))
+#     return mixedgauge(A, C)
+# end
+# function mixedgauge(
+#     A::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
+#     C0::AbstractOnLattice{L,<:AbstractTensorMap{S,1,1}},
+# ) where {L,S}
+#     C = deepcopy(C0)
+#     AL, _, _ = leftgauge!(similar.(A), C, A)
+#     AR, C, _ = rightgauge!(similar.(A), C, AL)
+#     diagonalise!(AL, C, AR)
+#     return AL, C, AR
+# end
 
 # Diagonalise the bond matrices using the singular value decomposition.
 function diagonalise!(
-    AL::AbstractOnLattice{L,<:AbstractTensor{S,2,1}},
-    C::AbstractOnLattice{L,<:AbstractTensor{S,1,1}},
-    AR::AbstractOnLattice{L,<:AbstractTensor{S,2,1}},
+    AL::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
+    C::AbstractOnLattice{L,<:AbstractTensorMap{S,1,1}},
+    AR::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
 ) where {L,S}
     U = similar(C)
     V = similar(C)
     for y in axes(C, 2)
         for x in axes(C, 1)
             U[x, y], C[x, y], V[x, y] = tsvd!(C[x, y])
-            gauge!(AL, U)
-            gauge!(AR, V)
         end
     end
+    gauge!(AL, U)
+    gauge!(AR, V)
     return AL, C, AR
 end
 function diagonalise!(mps::MPS)
@@ -125,11 +140,11 @@ end
 
 # Vectorised form of a gauge transformation. That is, A[x] <- U'[x-1]*A[x]*U[x]
 function gauge!(
-    A::AbstractOnLattice{L,<:AbstractTensor{S,2,1}},
-    U::AbstractOnLattice{L,<:AbstractTensor{S,1,1}},
+    A::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
+    U::AbstractOnLattice{L,<:AbstractTensorMap{S,1,1}},
 ) where {L,S}
     _A = centraltensor(A, U)
-    centraltensor!(A, U, _A)
+    centraltensor!(A, adjoint.(U), _A)
     return A
 end
 
@@ -159,27 +174,4 @@ end
 function lgsolve(x, T)
     @tensoropt y[rd; ru] := x[ld; lu] * T[lu rd; ru ld]
     return y
-end
-# TEMP
-#
-function mulbond(
-    C::AbstractTensorMap{S,1,1}, A::AbstractTensorMap{S,2,1}
-) where {S<:IndexSpace}
-    return mulbond!(similar(A), C, A)
-end
-function mulbond!(
-    CA::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}, A::AbstractTensorMap{S,2,1}
-) where {S<:IndexSpace}
-    return @tensoropt CA[1 2; 3] = C[1; a] * A[a 2; 3]
-end
-
-function mulbond(
-    A::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}
-) where {S<:IndexSpace}
-    return mulbond!(similar(A), A, C)
-end
-function mulbond!(
-    AC::AbstractTensorMap{S,2,1}, A::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}
-) where {S<:IndexSpace}
-    return @tensoropt AC[1 2; 3] = A[1 2; a] * C[a; 3]
 end
