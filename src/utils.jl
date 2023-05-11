@@ -84,3 +84,8 @@ function _permute(t::AbstractTensorMap{<:IndexSpace,N,M}, p::Tuple) where {N,M}
         return permute(t, p[1:N], p[(N + 1):(N + M)])
     end
 end
+
+# Swap codomain and domain (Base.transpose reverses indices)
+function _transpose(tsrc::AbsTen{N,M}) where {N,M}
+    return permute(tsrc, Tuple((N+1):(N+M))::NTuple{M::Int}, Tuple(1:N)::NTuple{N,Int})
+end
