@@ -1,35 +1,28 @@
 abstract type AbstractFixedPoints end
 
-struct FixedPoints{Nx,Ny,L<:AbsTen{1,2},R<:AbsTen{2,1}} <: AbstractFixedPoints
-    left::OnUnitCell{Nx,Ny,L}
-    right::OnUnitCell{Nx,Ny,R}
+# Fixed points of a transfer matrix
+struct FixedPoints{Lat<:AbstractLattice,L<:AbsTen{1,2},R<:AbsTen{2,1}} <: AbstractFixedPoints
+    left::OnLattice{Lat,L,Matrix{L}}
+    right::OnLattice{Lat,R,Matrix{R}}
 end
 
-function initleftfp(f, A::MultilineInfiniteMPS, M::InfiniteMPO)
-    nx, ny = size(M)
-    Ds = westbond.(M)
-    χs = hcat(westbond.(A)...)
-    data = [
-        TensorMap(
-            f, promote_type(numbertype(A), numbertype(M)), χs[x, y + 1], χs[x, y] * Ds[x, y]
-        ) for x in 1:nx, y in 1:ny
-    ]
-    return OnLattice(latticestyle(M), data)
-end
-function initrightfp(f, A::MultilineInfiniteMPS, M::InfiniteMPO)
-    nx, ny = size(M)
-    Ds = eastbond.(M)
-    χs = hcat(eastbond.(A)...)
-    data = [
-        TensorMap(
-            f, promote_type(numbertype(A), numbertype(M)), χs[x, y] * Ds[x, y], χs[x, y + 1]
-        ) for x in 1:nx, y in 1:ny
-    ]
-    return OnLattice(latticestyle(M), data)
+#TODO: refactor this mess
+function initfp(f, A::MPS, M)
+    D_left = westbond.(M)
+    D_right = circshift(D_left, (-1,0))
+
+    χ_left_top = westbond(A)
+    χ_right_top = circshift(westbond(A),(-1,0))
+    χ_left_bot = circshift(westbond(A),(0,-1))
+    χ_right_bot = circshift(westbond(A),(-1,-1))
+
+    left = @. TensorMap(f, ComplexF64, χ_left_bot, χ_left_top * D_left)
+    right = @. TensorMap(f, ComplexF64, χ_right_top * D_right, χ_right_bot)
+    return left, right
 end
 
-function FixedPoints(f, A::MultilineInfiniteMPS, M::InfiniteMPO)
-    return FixedPoints(initleftfp(f, A, M), initrightfp(f, A, M))
+function FixedPoints(f, A::MPS, M)
+    return FixedPoints(initfp(f,A,M)...)
 end
 
 function renorm(cb, ca, fl, fr)
@@ -43,13 +36,13 @@ function hcapply(
     return hc
 end
 
-function fixedpoints(A::MultilineInfiniteMPS, M::InfiniteMPO)
+function fixedpoints(A::MPS, M)
     FPS = FixedPoints(rand, A, M)
     return fixedpoints!(FPS, A, M)
 end
 
 #this is now the correct env func
-function fixedpoints!(FP::FixedPoints, A::MultilineInfiniteMPS, M::InfiniteMPO)
+function fixedpoints!(FP::FixedPoints, A::MPS, M)
     FL = FP.left
     FR = FP.right
 
@@ -107,14 +100,16 @@ function simple_environments!(FL, FR, A, M)
 end
 
 function fpsolve(
-    fl::AbsTen{1,2}, A::AbstractOnUnitCell{MPS,Nx,Ny}, M::InfiniteMPO{Nx,Ny}, x::Int, y::Int
-) where {Nx,Ny}
+    fl::AbsTen{1,2}, A::OnLattice, M, x::Int, y::Int
+) 
+    Nx = size(A)[1]
     fl_n = flsolve(fl, A, M, x, y, Val(Nx))
     return fl_n
 end
 function fpsolve(
-    fr::AbsTen{2,1}, A::AbstractOnUnitCell{MPS,Nx,Ny}, M::InfiniteMPO{Nx,Ny}, x::Int, y::Int
-) where {Nx,Ny}
+    fr::AbsTen{2,1}, A::OnLattice, M, x::Int, y::Int
+) 
+    Nx = size(A)[1]
     fr_n = frsolve(fr, A, M, x, y, Val(Nx))
     return fr_n
 end
