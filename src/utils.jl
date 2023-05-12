@@ -1,6 +1,6 @@
 # Convenience const. 
 const AbsTen{N₁,N₂,S} = AbstractTensorMap{S,N₁,N₂}
-
+const TenAbs{N₂,N₁,S} = AbstractTensorMap{S,N₁,N₂}
 
 # Output the permutation of that results in the k'th element of p moved to the
 # n'th position 
@@ -87,5 +87,22 @@ end
 
 # Swap codomain and domain (Base.transpose reverses indices)
 function _transpose(tsrc::AbsTen{N,M}) where {N,M}
-    return permute(tsrc, Tuple((N+1):(N+M))::NTuple{M::Int}, Tuple(1:N)::NTuple{N,Int})
+    return permute(tsrc, Tuple((N + 1):(N + M))::NTuple{M::Int}, Tuple(1:N)::NTuple{N,Int})
+end
+
+function permutecod(t::AbsTen{N,M}, p::NTuple{N,Int}) where {N,M}
+    return permute(t, p, Tuple((N + 1):(M + N))::NTuple{M,Int})
+end
+
+function permutedom(t::AbsTen{N,M}, p::NTuple{M,Int}) where {N,M}
+    p_dom = p .+ N
+    return permute(t, Tuple(1:N)::NTuple{N,Int}, p_dom)
+end
+function permutecod!(tdst, tsrc::AbsTen{N,M}, p::NTuple{N,Int}) where {N,M}
+    return permute!(tdst, tsrc, p, Tuple((N + 1):(M + N))::NTuple{M,Int})
+end
+
+function permutedom!(tdst, tsrc::AbsTen{N,M}, p::NTuple{M,Int}) where {N,M}
+    p_dom = p .+ N
+    return permute!(tdst, tsrc, Tuple(1:N)::NTuple{N,Int}, p_dom)
 end
