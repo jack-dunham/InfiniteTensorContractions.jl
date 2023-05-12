@@ -1,12 +1,12 @@
 # Solves AL * C = C * A (= AC)
 function leftgauge!(
-    AL::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
-    L::AbstractOnLattice{U,<:AbstractTensorMap{S,1,1}},
-    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}};
+    AL::AbstractOnLattice{U,<:AbstractTensorMap{S,N,2}},
+    L::AbstractOnLattice{U,<:AbstractTensorMap{S,0,2}},
+    A::AbstractOnLattice{U,<:AbstractTensorMap{S,N,2}};
     tol=1e-12,
     maxiter=100,
-    verbose=false
-) where {U,S}
+    verbose=false,
+) where {U,S,N}
     numsites = length(A)
     r = 1:numsites
 
@@ -34,13 +34,13 @@ function leftgauge!(
     )
 
     # R[end] <- C = sqrt(C^2)
-    L[end] = sqrt(Ls[1])
+    L[end] = permute(sqrt(permute(Ls[1], (1,), (2,))), (), (1, 2))
 
     for x in r
         Lold = L[x - 1]
 
-        AL[x], L[x] = leftorth!(mulbond!(AL[x], L[x - 1], A[x]))
-
+        # AL[x], L[x] = leftorth!(mulbond!(AL[x], L[x - 1], A[x]))
+        AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x - 1]), A[x])
         λ[x] = norm(L[x])
         rmul!(L[x], 1 / λ[x])
 
@@ -52,7 +52,7 @@ function leftgauge!(
     while numiter < maxiter && max(ϵ...) > tol
         for x in r
             Lold = L[x]
-            AL[x], L[x] = leftorth!(mulbond!(AL[x], L[x - 1], A[x]))
+            AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x - 1]), A[x])
 
             λ[x] = norm(L[x])
             rmul!(L[x], 1 / λ[x])
@@ -66,37 +66,51 @@ function leftgauge!(
     return AL, L, λ
 end
 function rightgauge!(
-    AR::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}},
-    R::AbstractOnLattice{U,<:AbstractTensorMap{S,1,1}},
-    A::AbstractOnLattice{U,<:AbstractTensorMap{S,2,1}};
+    AR::AbstractOnLattice{U,<:AbstractTensorMap{S,N,2}},
+    R::AbstractOnLattice{U,<:AbstractTensorMap{S,0,2}},
+    A::AbstractOnLattice{U,<:AbstractTensorMap{S,N,2}};
     kwargs...,
-) where {U,S}
-    # Permute left and right bonds
-    AL = permute.(AR, Ref((3, 2)), Ref((1,)))
-    L = permute.(R, Ref((2,)), Ref((1,)))
-    A = permute.(A, Ref((3, 2)), Ref((1,)))
+) where {U,S,N}
+    # Permute left and right virtual bonds bonds
+    AL = permutedom.(AR, Ref((2, 1)))
+    L = permutedom.(R, Ref((2, 1)))
+    A = permutedom.(A, Ref((2, 1)))
 
     # Run the gauging algorithm
     AL, L, λ = leftgauge!(AL, L, A; kwargs...)
 
     # Permute left and right bonds
-    permute!.(AR, AL, Ref((3, 2)), Ref((1,)))
-    permute!.(R, L, Ref((2,)), Ref((1,)))
+    permutedom!.(AR, AL, Ref((2, 1)))
+    permutedom!.(R, L, Ref((2, 1)))
     return AR, R, λ
+end
+# AL[x] <- L[x - 1] * A[x]
+function leftdecomp!(AL, L, A::AbsTen{N,2}) where {N}
+    # Overwrite AL
+    mulbond!(AL, L, A)
+    AL_p = permute(AL, tuple(1:N..., N + 2)::NTuple{N + 1,Int}, (N + 1,))
+    temp_AL, temp_L = leftorth!(AL_p)
+    permute!(AL, temp_AL, Tuple(1:N)::NTuple{N,Int}, (N + 2, N + 1))
+    permute!(L, temp_L, (), (2, 1))
+    return AL, L
 end
 
 # Find the mixedguage of uniform MPS A, writing result into AL,C,AR
-function mixedgauge!(AL,C,AR,A; verbose=false, kwargs...)
+function mixedgauge!(AL, C, AR, A; verbose=false, kwargs...)
     C0 = deepcopy(C)
     for y in axes(A, 2)
         verbose && @info "Gauging right..."
-        rightgauge!(lview(AR,:,y), lview(C,:,y), lview(A,:,y); verbose=verbose, kwargs...)
+        rightgauge!(
+            lview(AR, :, y), lview(C, :, y), lview(A, :, y); verbose=verbose, kwargs...
+        )
         verbose && @info "Gauging left..."
-        leftgauge!(lview(AL,:,y), lview(C,:,y), lview(AR,:,y); verbose=verbose, kwargs...)
+        leftgauge!(
+            lview(AL, :, y), lview(C, :, y), lview(AR, :, y); verbose=verbose, kwargs...
+        )
     end
     # currently not working 
     # diagonalise!(AL,C,AR)
-    return AL,C,AR
+    return AL, C, AR
 end
 
 # function mixedgauge(A::AbstractOnLattice{<:AbstractLattice,<:AbsTen{2,1}})
@@ -149,29 +163,38 @@ function gauge!(
 end
 
 function mps_transfer(
-    a::AbstractTensorMap{S,2,1}, al::AbstractTensorMap{S,2,1}
+    a::AbstractTensorMap{S,2,2}, al::AbstractTensorMap{S,2,2}
 ) where {S<:IndexSpace}
-    @tensoropt T[lu rd; ru ld] := a[lu a; ru] * (al')[rd; ld a]
+    @tensoropt T[dr dl; ur ul] := a[p1 p2; ur ul] * (al')[dr dl; p1 p2]
+    return T
+end
+function mps_transfer(
+    a::AbstractTensorMap{S,1,2}, al::AbstractTensorMap{S,1,2}
+) where {S<:IndexSpace}
+    @tensoropt T[dr dl; ur ul] := a[p1; ur ul] * (al')[dr dl; p1]
     return T
 end
 
-function compose_transfer!(T1, T2)
-    Tn = deepcopy(T1)
-    @tensoropt T1[lu rd; ru ld] = Tn[lu md; mu ld] * T2[mu rd; ru md]
-    return T1
+function compose_transfer(T1, T2)
+    @tensoropt T[dr dl; ur ul] := T1[dr d; ur u] * T2[d dl; u ul]
+    return T
 end
 
 function multi_transfer(A::AbstractArray, AL::AbstractArray)
     T = mps_transfer(A[1], A[1])
-    for i in 2:length(A)
+    for i in axes(A, 1)
+        if i == 1
+            continue
+        end
         Ti = mps_transfer(A[i], AL[i])
-        compose_transfer!(T, Ti)
+        T = compose_transfer(T, Ti)
     end
     # T = T / norm(T)
     return T
 end
 
 function lgsolve(x, T)
-    @tensoropt y[rd; ru] := x[ld; lu] * T[lu rd; ru ld]
+    y = similar(x)
+    @tensoropt y[ur dr] = x[ul dl] * T[dr dl; ur ul]
     return y
 end

@@ -5,20 +5,22 @@ abstract type AbstractMPS{L<:AbstractLattice} end
     struct MPS
 """
 struct MPS{
-    L,AType<:AbstractOnLattice{L,<:AbsTen{2,1}},CType<:AbstractOnLattice{L,<:AbsTen{1,1}}
+    L,AType<:AbstractOnLattice{L,<:TenAbs{2}},CType<:AbstractOnLattice{L,<:AbsTen{0,2}}
 } <: AbstractMPS{L}
     AL::AType
     C::CType
     AR::AType
     AC::AType
-    function MPS(AL::AType, C::CType, AR::AType, AC::AType) where {
-        L,AType<:AbstractOnLattice{L}, CType<:AbstractOnLattice{L}}
+    function MPS(
+        AL::AType, C::CType, AR::AType, AC::AType
+    ) where {L,AType<:AbstractOnLattice{L},CType<:AbstractOnLattice{L}}
         mps = new{L,AType,CType}(AL, C, AR, AC)
         validate(mps)
         return mps
     end
-    function MPS(AL::AType, C::CType, AR::AType, AC::AType) where {
-        L<:SubLattice,AType<:AbstractOnLattice{L}, CType<:AbstractOnLattice{L}}
+    function MPS(
+        AL::AType, C::CType, AR::AType, AC::AType
+    ) where {L<:SubLattice,AType<:AbstractOnLattice{L},CType<:AbstractOnLattice{L}}
         mps = new{L,AType,CType}(AL, C, AR, AC)
         return mps
     end
@@ -37,7 +39,7 @@ getcentral(mps::AbstractMPS) = mps.AC
 
 unpack(mps::AbstractMPS) = (getleft(mps), getbond(mps), getright(mps), getcentral(mps))
 
-function isgauged(mps_single::AbstractMPS{<:AbstractLattice{Nx,1}}) where {Nx} 
+function isgauged(mps_single::AbstractMPS{<:AbstractLattice{Nx,1}}) where {Nx}
     AL, C, AR, AC = unpack(mps_single)
     for x in axes(AL, 1)
         if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x - 1], AR[x]) ≈ AC[x])
@@ -62,33 +64,29 @@ function validate(mps::AbstractMPS)
     return mps
 end
 
-# function MPS(
-#     f, T, lattice::AbstractLattice{Nx,Ny}, D::S, χ::S
-# ) where {Nx,Ny,S<:IndexSpace}
-#     return MPS(f, T, lattice, fill(D, Nx, Ny), fill(χ, Nx, Ny))
-# end
-function MPS(f, T, lattice, D, χ)
-    # D_lat = OnLattice(lattice, D)
-    # χ_lat = OnLattice(lattice, χ)
-    return MPS(f, T, _fill_all_maybe(lattice, D, χ)...)
+## Contructors
+function MPS(f, T, lattice, D, χ; kwargs...)
+    return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
 end
-function MPS(f, T, D::AbstractOnLattice{L,S}, χ::AbstractOnLattice{L,S}) where {L,S<:IndexSpace}
-    χ_dom = χ
-    χ_cod = circshift(χ,(1,0))
-    data_lat = @. TensorMap(f, T, χ_cod * D, χ_dom)
-    return MPS(data_lat)
+function MPS(
+    f, T, D::AbstractOnLattice{L,S}, right_bonds::AbstractOnLattice{L,S}; kwargs...
+) where {L,S<:IndexSpace}
+    left_bonds = circshift(right_bonds, (1, 0))
+    println(size(D))
+    data_lat = @. TensorMap(f, T, D, right_bonds * adjoint(left_bonds))
+    return MPS(data_lat; kwargs...)
 end
 
-function MPS(A::AbstractOnLattice)
-    # Left and right refers to the left and right indices of the BOND MATRIX,
-    # not the MPS tensors.
-    χ_left = getindex.(domain.(A), 1)
-    χ_right = getindex.(codomain.(circshift(A, (1,0))), 1)
+function MPS(A::AbstractOnLattice; kwargs...)
+    bonds = @. getindex(domain(A), 1) # Canonical bond (right-hand) bond of mps tensor
+
+    T = numbertype(A)
 
     AL = similar.(A)
-    C = TensorMap.(rand, ComplexF64, χ_left, χ_right)
+    C = @. TensorMap(rand, T, one(bonds), bonds * adjoint(bonds)) # R * L
     AR = similar.(A)
-    mixedgauge!(AL, C, AR, A)
+
+    mixedgauge!(AL, C, AR, A; kwargs...)
     return MPS(AL, C, AR)
 end
 
@@ -106,7 +104,7 @@ function Base.getindex(mps::AbstractMPS, y::Int)
     return MPS(subAL, subC, subAR, subAC)
 end
 
-function Base.iterate(mps::AbstractMPS{<:AbstractLattice{Nx,Ny}}, state = 1) where {Nx,Ny}
+function Base.iterate(mps::AbstractMPS{<:AbstractLattice{Nx,Ny}}, state=1) where {Nx,Ny}
     if state > Ny
         return nothing
     else
@@ -116,27 +114,43 @@ end
 
 Base.length(mps::AbstractMPS{<:AbstractLattice{Nx,Ny}}) where {Nx,Ny} = Ny
 
-_similar_ac(A::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}) where {S} = similar(A)
-function _similar_ac(C::AbstractTensorMap{S,1,1}, A::AbstractTensorMap{S,2,1}) where {S}
-    return _similar_ac(A, C)
+function _similar_ac(ac1::AbstractTensorMap{S,N}, ac2::AbstractTensorMap{S,M}) where {S,N,M}
+    return _similar_ac(Val(N), ac1, ac2)
 end
+_similar_ac(::Val{0}, ac1, ac2) = similar(ac2)
+_similar_ac(::Val{N}, ac1, ac2) where {N} = similar(ac1)
 
 centraltensor(A1, A2) = centraltensor!(_similar_ac.(A1, A2), A1, A2)
-centraltensor!(AC, AL::AbstractOnLattice{L,<:AbsTen{2,1}}, C) where {L} = mulbond!.(AC, AL, C)
-centraltensor!(AC, C::AbstractOnLattice{L,<:AbsTen{1,1}}, AR) where {L} = mulbond!.(AC, circshift(C, (1, 0)), AR)
+function centraltensor!(AC, AL::AbstractOnLattice{L,<:AbsTen{N,2}}, C) where {L,N}
+    return mulbond!.(AC, AL, C)
+end
+function centraltensor!(AC, C::AbstractOnLattice{L,<:AbsTen{0,2}}, AR) where {L}
+    return mulbond!.(AC, circshift(C, (1, 0)), AR)
+end
 
 function mulbond(A1::AbstractTensorMap{S}, A2::AbstractTensorMap{S}) where {S}
     return mulbond!(_similar_ac(A1, A2), A1, A2)
 end
 function mulbond!(
-    CA::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}, A::AbstractTensorMap{S,2,1}
+    CA::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}, A::AbstractTensorMap{S,1,2}
 ) where {S<:IndexSpace}
-    return @tensoropt CA[1 2; 3] = C[1; a] * A[a 2; 3]
+    return @tensoropt CA[p1; xr xl] = C[x_in xl] * A[p1; xr x_in]
 end
 function mulbond!(
-    AC::AbstractTensorMap{S,2,1}, A::AbstractTensorMap{S,2,1}, C::AbstractTensorMap{S,1,1}
+    CA::AbstractTensorMap{S,2,2}, C::AbstractTensorMap{S,0,2}, A::AbstractTensorMap{S,2,2}
 ) where {S<:IndexSpace}
-    return @tensoropt AC[1 2; 3] = A[1 2; a] * C[a; 3]
+    return @tensoropt CA[p1 p2; xr xl] = C[x_in xl] * A[p1 p2; xr x_in]
+end
+###
+function mulbond!(
+    AC::AbstractTensorMap{S,1,2}, A::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}
+) where {S<:IndexSpace}
+    return @tensoropt AC[p1; xr xl] = A[p1; x_in xl] * C[xr x_in]
+end
+function mulbond!(
+    AC::AbstractTensorMap{S,2,2}, A::AbstractTensorMap{S,2,2}, C::AbstractTensorMap{S,0,2}
+) where {S<:IndexSpace}
+    return @tensoropt AC[p1 p2; xr xl] = A[p1 p2; x_in xl] * C[xr x_in]
 end
 
 function Base.transpose(M::MPS)
@@ -144,6 +158,5 @@ function Base.transpose(M::MPS)
 end
 
 westbond(mps::MPS) = westbond.(mps.AC)
-
 
 # norm(A::AbstractMPS) = tr(c * c')
