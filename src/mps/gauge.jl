@@ -20,21 +20,29 @@ function leftgauge!(
 
     ϵ[end] = 2 * tol
 
-    T = multi_transfer(A, A)
+    T = multi_transfer(A, A) # dr dl, ur ul -> ul dl, ur dr
 
+    Tp = permute(T, (4, 2), (3, 1))
+
+    # λs, Ls, info = KrylovKit.eigsolve(
+    #     y -> lgsolve(y, T), L[end], 1, :LM; ishermitian=true, tol=tol, eager=true, maxiter=1
+    # )
     λs, Ls, info = KrylovKit.eigsolve(
-        y -> lgsolve(y, T),
-        L[end],
-        1,
-        :LM;
-        ishermitian=false,
-        tol=tol,
-        eager=true,
-        maxiter=1,
+        y -> y * Tp, L[end], 1, :LM; ishermitian=false, tol=tol, eager=true, maxiter=1
     )
 
-    # R[end] <- C = sqrt(C^2)
-    L[end] = permute(sqrt(permute(Ls[1], (1,), (2,))), (), (1, 2))
+    Lp = permute(Ls[1], (1,), (2,))
+
+    # println("Hermiticity: ", norm(Lp - Lp'))
+
+    Lp = 1 / 2 * (Lp + Lp')
+
+    # Eigenvector can be α * v, so choose α s.t. v positive
+    Lp = sqrt(Lp * Lp)
+
+    D, V = eigh(Lp)
+
+    L[end] = permute(V * sqrt(D) * V', (), (1, 2))
 
     for x in r
         Lold = L[x - 1]
@@ -85,6 +93,7 @@ function rightgauge!(
     return AR, R, λ
 end
 # AL[x] <- L[x - 1] * A[x]
+# TODO: remove inplace stuff, replace with _leftorth from utils.jl
 function leftdecomp!(AL, L, A::AbsTen{N,2}) where {N}
     # Overwrite AL
     mulbond!(AL, L, A)
@@ -109,7 +118,7 @@ function mixedgauge!(AL, C, AR, A; verbose=false, kwargs...)
         )
     end
     # currently not working 
-    # diagonalise!(AL,C,AR)
+    # diagonalise!(AL, C, AR)
     return AL, C, AR
 end
 
@@ -130,15 +139,16 @@ end
 
 # Diagonalise the bond matrices using the singular value decomposition.
 function diagonalise!(
-    AL::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
-    C::AbstractOnLattice{L,<:AbstractTensorMap{S,1,1}},
-    AR::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
+    AL::AbstractOnLattice{L,<:AbstractTensorMap{S}},
+    C::AbstractOnLattice{L,<:AbstractTensorMap{S}},
+    AR::AbstractOnLattice{L,<:AbstractTensorMap{S}},
 ) where {L,S}
     U = similar(C)
     V = similar(C)
+
     for y in axes(C, 2)
         for x in axes(C, 1)
-            U[x, y], C[x, y], V[x, y] = tsvd!(C[x, y])
+            U[x, y], C[x, y], V[x, y] = _tsvd(C[x, y])
         end
     end
     gauge!(AL, U)
@@ -152,10 +162,18 @@ function diagonalise!(mps::MPS)
     return mps
 end
 
+function _tsvd(t)
+    u, s, v = tsvd(t, (2,), (1,))
+    up = permute(u, (), (2, 1))
+    sp = permute(s, (), (2, 1))
+    vp = permute(s, (), (2, 1))
+    return up, sp, vp
+end
+
 # Vectorised form of a gauge transformation. That is, A[x] <- U'[x-1]*A[x]*U[x]
 function gauge!(
-    A::AbstractOnLattice{L,<:AbstractTensorMap{S,2,1}},
-    U::AbstractOnLattice{L,<:AbstractTensorMap{S,1,1}},
+    A::AbstractOnLattice{L,<:AbstractTensorMap{S}},
+    U::AbstractOnLattice{L,<:AbstractTensorMap{S,0,2}},
 ) where {L,S}
     _A = centraltensor(A, U)
     centraltensor!(A, adjoint.(U), _A)

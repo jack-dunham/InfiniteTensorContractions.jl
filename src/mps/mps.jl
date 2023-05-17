@@ -69,10 +69,9 @@ function MPS(f, T, lattice, D, χ; kwargs...)
     return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
 end
 function MPS(
-    f, T, D::AbstractOnLattice{L,S}, right_bonds::AbstractOnLattice{L,S}; kwargs...
-) where {L,S<:IndexSpace}
+    f, T, D::AbstractOnLattice{L}, right_bonds::AbstractOnLattice{L}; kwargs...
+) where {L}
     left_bonds = circshift(right_bonds, (1, 0))
-    println(size(D))
     data_lat = @. TensorMap(f, T, D, right_bonds * adjoint(left_bonds))
     return MPS(data_lat; kwargs...)
 end
@@ -131,6 +130,7 @@ end
 function mulbond(A1::AbstractTensorMap{S}, A2::AbstractTensorMap{S}) where {S}
     return mulbond!(_similar_ac(A1, A2), A1, A2)
 end
+# Right
 function mulbond!(
     CA::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}, A::AbstractTensorMap{S,1,2}
 ) where {S<:IndexSpace}
@@ -141,7 +141,7 @@ function mulbond!(
 ) where {S<:IndexSpace}
     return @tensoropt CA[p1 p2; xr xl] = C[x_in xl] * A[p1 p2; xr x_in]
 end
-###
+# Left
 function mulbond!(
     AC::AbstractTensorMap{S,1,2}, A::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}
 ) where {S<:IndexSpace}
