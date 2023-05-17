@@ -10,6 +10,12 @@ abstract type AbstractBoundaryState{B<:AbstractBoundary} end
     tol::Float64 = 1e-12
 end
 
+function similarboundary(
+    ::Type{Alg}, alg::AbstractBoundaryAlgorithm
+) where {Alg<:AbstractBoundary}
+    return BoundaryAlgorithm(Alg, alg.bonddim, alg.verbosity, alg.maxiter, alg.tol)
+end
+
 @doc raw"""
     BoundaryState{B<:AbstractBoundary} <: AbstractBoundaryState{B}
 
@@ -77,13 +83,11 @@ function calculate!(state::BoundaryState)
     error = info.error
     iterations = info.iterations
 
+    # Remove any wrappers, converting tensors to appropraite forms.
+    bulk = detrace(state.bulk)
+
     info.error, info.iterations = calculate!(
-        state.tensors,
-        state.bulk;
-        bonddim=bonddim,
-        verbosity=verbosity,
-        tol=tol,
-        maxiter=maxiter,
+        state.tensors, bulk; bonddim=bonddim, verbosity=verbosity, tol=tol, maxiter=maxiter
     )
 
     info.error > tol ? info.converged = false : info.converged = true
@@ -91,4 +95,13 @@ function calculate!(state::BoundaryState)
     info.finished = true
 
     return state
+end
+
+function similarboundary(
+    ::Type{Alg}, state::AbstractBoundaryState
+) where {Alg<:AbstractBoundary}
+    bulk = state.bulk
+    new_alg = similarboundary(Alg, state.alg)
+    new_state = new_alg(bulk)
+    return new_state
 end

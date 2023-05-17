@@ -1,85 +1,164 @@
 abstract type AbstractFixedPoints end
 
 # Fixed points of a transfer matrix
-struct FixedPoints{Lat<:AbstractLattice,L<:AbsTen{1,2},R<:AbsTen{2,1}} <: AbstractFixedPoints
-    left::OnLattice{Lat,L,Matrix{L}}
-    right::OnLattice{Lat,R,Matrix{R}}
+struct FixedPoints{Lat<:AbstractLattice,FP<:TenAbs{2}} <: AbstractFixedPoints
+    left::OnLattice{Lat,FP,Matrix{FP}}
+    right::OnLattice{Lat,FP,Matrix{FP}}
 end
 
-#TODO: refactor this mess
-function initfp(f, A::MPS, M)
-    D_left = westbond.(M)
-    D_right = circshift(D_left, (-1,0))
+FixedPoints(f, mps::MPS, bulk::ContractableTensors) = initfixedpoints(f, mps, bulk)
 
-    χ_left_top = westbond(A)
-    χ_right_top = circshift(westbond(A),(-1,0))
-    χ_left_bot = circshift(westbond(A),(0,-1))
-    χ_right_bot = circshift(westbond(A),(-1,-1))
-
-    left = @. TensorMap(f, ComplexF64, χ_left_bot, χ_left_top * D_left)
-    right = @. TensorMap(f, ComplexF64, χ_right_top * D_right, χ_right_bot)
-    return left, right
+# This fucking sucks. Just get indexes from mps and bulk cos this aint type stable
+# for some stupid reason
+function initfixedpoints(f, mps::MPS, bulk::ContractableTensors)
+    mps_tensor = getcentral(mps)
+    bulk_tensor = convert.(TensorMap, bulk)
+    left = _initfixedpoints.(f, mps_tensor, bulk_tensor, :left)
+    right = _initfixedpoints.(f, mps_tensor, bulk_tensor, :right)
+    return FixedPoints(left, right)
 end
 
-function FixedPoints(f, A::MPS, M)
-    return FixedPoints(initfp(f,A,M)...)
+function _initfixedpoints(
+    f, mps::AbstractTensorMap{S}, bulk::AbstractTensorMap{S}, leftright::Symbol
+) where {S}
+    T = promote_type(eltype(mps), eltype(bulk))
+
+    cod = fixedpoint_codomain(bulk, leftright)
+    dom = fixedpoint_domain(mps, leftright)
+
+    return TensorMap(f, T, cod, dom)
 end
+
+function fixedpoint_codomain(bulk, leftright::Symbol)
+    if leftright === :left
+        return _fixedpoint_codomain(bulk, 3)
+    elseif leftright === :right
+        return _fixedpoint_codomain(bulk, 1)
+    else
+        throw(ArgumentError(""))
+    end
+end
+_fixedpoint_codomain(bulk::AbsTen{0,4}, lr::Int) = domain(bulk)[lr]
+_fixedpoint_codomain(bulk::AbsTen{2,4}, lr::Int) = domain(bulk)[lr] * domain(bulk)[lr]'
+
+function fixedpoint_domain(mps_tensor, leftright::Symbol)
+    if leftright === :left
+        return _fixedpoint_domain(mps_tensor, 2)
+    elseif leftright === :right
+        return _fixedpoint_domain(mps_tensor, 1)
+    else
+        throw(ArgumentError(""))
+    end
+end
+_fixedpoint_domain(mps_tensor, lr::Int) = domain(mps_tensor)[lr]' * domain(mps_tensor)[lr]
 
 function renorm(cb, ca, fl, fr)
-    return dot(cb, hcapply(ca, fl, fr))
+    c_out = hcapply!(similar(ca), ca, fl, fr)
+    N = dot(cb, c_out)
+    return N
 end
 
-function hcapply(
-    c::AbstractTensorMap{S,1,1}, fl::AbstractTensorMap{S,1,2}, fr::AbstractTensorMap{S,2,1}
-) where {S<:IndexSpace}
-    @tensoropt hc[a; b] := c[x; y] * fl[a; x m] * fr[y m; b]
+function hcapply!(
+    hc::AbstractTensorMap{S,0,2},
+    c::AbstractTensorMap{S,0,2},
+    fl::AbstractTensorMap{S,1,2},
+    fr::AbstractTensorMap{S,1,2},
+) where {S}
+    @tensoropt hc[dr dl] = c[ur ul] * fl[m; ul dl] * fr[m; ur dr]
+    return hc
+end
+function hcapply!(
+    hc::AbstractTensorMap{S,0,2},
+    c::AbstractTensorMap{S,0,2},
+    fl::AbstractTensorMap{S,2,2},
+    fr::AbstractTensorMap{S,2,2},
+) where {S}
+    @tensoropt hc[dr dl] = c[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr]
     return hc
 end
 
-function fixedpoints(A::MPS, M)
-    FPS = FixedPoints(rand, A, M)
-    return fixedpoints!(FPS, A, M)
+function fixedpoints(mps::MPS, bulk::ContractableTensors)
+    initial_fpoints = FixedPoints(rand, mps, bulk)
+    return fixedpoints!(initial_fpoints, mps, bulk)
 end
 
 #this is now the correct env func
-function fixedpoints!(FP::FixedPoints, A::MPS, M)
-    FL = FP.left
-    FR = FP.right
 
-    Nx, Ny = size(M)
+function fixedpoints!(fpoints::FixedPoints, mps::MPS, bulk::ContractableTensors)
+    AL, C, AR, _ = unpack(mps)
+    tm_left = TransferMatrix.(AL, bulk, circshift(AL, (0, -1)))
+    tm_right = TransferMatrix.(AR, bulk, circshift(AR, (0, -1)))
 
-    # λ = Matrix{numbertype(M)}(undef, Nx, Ny)
+    return fixedpoints!(fpoints, tm_left, tm_right, C)
+end
 
-    AL, C, AR, _ = unpack(A)
+function fixedpoints!(
+    fpoints::FixedPoints,
+    tm_left::TransferMatrices,
+    tm_right::TransferMatrices,
+    C::AbstractOnLattice,
+)
+    FL = fpoints.left
+    FR = fpoints.right
+
+    Nx, Ny = size(C)
 
     for y in 1:Ny
-        _, Ls, _ = eigsolve(z -> fpsolve(z, AL, M, 1, y), FL[1, y], 1, :LM)
-        _, Rs, _ = eigsolve(z -> fpsolve(z, AR, M, Nx, y), FR[Nx, y], 1, :LM)
+        # _, Ls, _ = eigsolve(z -> fpsolve(z, AL, M, 1, y), FL[1, y], 1, :LM)
+        # _, Rs, _ = eigsolve(z -> fpsolve(z, AR, M, Nx, y), FR[Nx, y], 1, :LM)
+        scal_left, Ls, linfo = eigsolve(
+            z -> leftsolve(z, tm_left[:, y]), FL[1, y], 1, :LM; ishermitian=false
+        )
+        scal_right, Rs, rinfo = eigsolve(
+            z -> rightsolve(z, tm_right[:, y]), FR[Nx, y], 1, :LM; ishermitian=false
+        )
 
         FL[1, y] = Ls[1]
+        FR[end, y] = Rs[1]
+
+        # @info "left: $(scal_left[1]) right: $(scal_right[1])"
 
         for x in 2:Nx
-            FL[x, y] =
-                FL[x - 1, y] * TransferMatrix(AL[x - 1, y], M[x - 1, y], AL[x - 1, y + 1])#works
+            # FL[x, y] =
+            #     FL[x - 1, y] * TransferMatrix(AL[x - 1, y], M[x - 1, y], AL[x - 1, y + 1])#works
+            multransfer!(FL[x, y], FL[x - 1, y], tm_left[x - 1, y])
         end
 
-        NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1])
+        NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
+
+        # NN = sqrt(NN)
 
         # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
-        FL[1, y] = rmul!(FL[1, y], 1 / sqrt(NN)) #correct NN 
-        FR[Nx, y] = rmul!(Rs[1], 1 / sqrt(NN)) #correct NN
+        rmul!(FL[1, y], 1 / NN) #correct NN
+        rmul!(FR[end, y], 1 / NN) #correct NN
 
         for x in (Nx - 1):-1:1
-            FR[x, y] =
-                TransferMatrix(AR[x + 1, y], M[x + 1, y], AR[x + 1, y + 1]) * FR[x + 1, y]#works
+            # FR[x, y] =
+            #     TransferMatrix(AR[x + 1, y], M[x + 1, y], AR[x + 1, y + 1]) * FR[x + 1, y]#works
+            multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
 
             NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
 
-            rmul!(FR[x, y], 1 / sqrt(NN))
-            rmul!(FL[x + 1, y], 1 / sqrt(NN))
+            rmul!(FR[x, y], 1 / NN)
+            rmul!(FL[x + 1, y], 1 / NN)
         end
     end
-    return FP # mutated
+    return fpoints
+end
+# FL[x] * T[x] = FL[x + 1]
+function leftsolve(f0, Ts)
+    f_new = f0
+    for T in Ts
+        f_new = f_new * T
+    end
+    return f_new
+end
+function rightsolve(f0, Ts)
+    f_new = f0
+    for T in reverse(Ts)
+        f_new = T * f_new
+    end
+    return f_new
 end
 
 function simple_environments!(FL, FR, A, M)
@@ -99,16 +178,12 @@ function simple_environments!(FL, FR, A, M)
     return FL, FR
 end
 
-function fpsolve(
-    fl::AbsTen{1,2}, A::OnLattice, M, x::Int, y::Int
-) 
+function fpsolve(fl::AbsTen{1,2}, A::OnLattice, M, x::Int, y::Int)
     Nx = size(A)[1]
     fl_n = flsolve(fl, A, M, x, y, Val(Nx))
     return fl_n
 end
-function fpsolve(
-    fr::AbsTen{2,1}, A::OnLattice, M, x::Int, y::Int
-) 
+function fpsolve(fr::AbsTen{2,1}, A::OnLattice, M, x::Int, y::Int)
     Nx = size(A)[1]
     fr_n = frsolve(fr, A, M, x, y, Val(Nx))
     return fr_n
