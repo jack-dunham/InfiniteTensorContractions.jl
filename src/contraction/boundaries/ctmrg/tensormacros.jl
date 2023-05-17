@@ -1,22 +1,38 @@
 projectcorner(c, t, p) = projectcorner!(similar(c), c, t, p)
-function projectcorner!(c_dst, c_src, t::AbsTen{1,2}, uv)
+function projectcorner!(c_dst, c_src, t, uv)
+    if c_dst === c_src
+        c_copy = deepcopy(c_src)
+        return _projectcorner!(c_dst, c_copy, t, uv)
+    else
+        return _projectcorner!(c_dst, c_src, t, uv)
+    end
+end
+function _projectcorner!(c_dst, c_src, t::AbsTen{1,2}, uv)
     # P: (x,D)<-(x_out)
     @tensoropt c_dst[h0 v0] = c_src[h1 v1] * t[v2; h0 h1] * uv[v1 v2; v0]
     return c_dst
 end
-function projectcorner!(c_dst, c_src, t::AbsTen{2,2}, uv)
+function _projectcorner!(c_dst, c_src, t::AbsTen{2,2}, uv)
     # P: (x,D)<-(x_out)
     @tensoropt c_dst[h0 v0] = c_src[h1 v1] * t[v2 x; h0 h1] * uv[v1 v2 x; v0]
     return c_dst
 end
 
 projectedge(t, m, u, v) = projectedge!(similar(t), t, m, u, v)
-function projectedge!(t_dst::AbsTen{1,2}, t_src::AbsTen{1,2}, m, u, v)
+function projectedge!(t_dst, t_src, m, u, v)
+    if t_dst === t_src
+        t_copy = deepcopy(t_src)
+        return _projectedge!(t_dst, t_copy, m, u, v)
+    else
+        return _projectedge!(t_dst, t_src, m, u, v)
+    end
+end
+function _projectedge!(t_dst::AbsTen{1,2}, t_src::AbsTen{1,2}, m, u, v)
     @tensoropt t_dst[h0; v0_d v0_u] =
         t_src[h1; v3 v1] * m[h0 v4 h1 v2] * u[v1 v2; v0_u] * v[v3 v4; v0_d]
     return t_dst
 end
-function projectedge!(t_dst::AbsTen{2,2}, t_src::AbsTen{2,2}, m, u, v)
+function _projectedge!(t_dst::AbsTen{2,2}, t_src::AbsTen{2,2}, m, u, v)
     @tensoropt (
         k => 2,
         b => 2,

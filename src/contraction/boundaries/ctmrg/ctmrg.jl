@@ -39,7 +39,7 @@ function Base.getindex(corners::Corners, i...)
     c1 = C1[x1 - 1, y1 - 1]
     c2 = C2[x2 + 1, y1 - 1]
     c3 = C3[x2 + 1, y2 + 1]
-    c4 = C3[x1 - 1, y2 + 1]
+    c4 = C4[x1 - 1, y2 + 1]
 
     return c1, c2, c3, c4
 end
@@ -98,7 +98,9 @@ function calculate!(ctmrg::CTMRG, bulk; kwargs...)
     return ctmrgloop!(ctmrg, bulk; kwargs...)
 end
 
-function ctmrgloop!(ctmrg::CTMRG, bulk; bonddim=2, verbosity=1, tol=1e-12, maxiter=100)
+function ctmrgloop!(
+    ctmrg::CTMRG, bulk::ContractableTensors; bonddim=2, verbosity=1, tol=1e-12, maxiter=100
+)
     bondspace = dimtospace(bulk, bonddim)
 
     ctmrg_p = initpermuted(ctmrg)
@@ -112,18 +114,18 @@ function ctmrgloop!(ctmrg::CTMRG, bulk; bonddim=2, verbosity=1, tol=1e-12, maxit
     error = Inf
     iterations = 0
 
-    bulk_tensors = contractphysical_maybe.(bulk)
-    bulk_tensors_p = contractphysical_maybe.(bulk_p)
+    # bulk_tensors = contractphysical_maybe.(bulk)
+    # bulk_tensors_p = contractphysical_maybe.(bulk_p)
 
     while error > tol && iterations < maxiter
         # Sweep along the x axis (left/right)
-        ctmrgmove!(ctmrg, x_projectors, bulk_tensors, bonddim)
+        ctmrgmove!(ctmrg, x_projectors, bulk, bonddim)
 
         # Write updated tensors into the permuted placeholders
         updatecorners!(ctmrg_p, ctmrg)
 
         # Sweep along the y axis (up/down)
-        ctmrgmove!(ctmrg_p, y_projectors, bulk_tensors_p, bonddim)
+        ctmrgmove!(ctmrg_p, y_projectors, bulk_p, bonddim)
 
         # Update the unpermuted (true) tensors.
         updatecorners!(ctmrg, ctmrg_p)
@@ -131,6 +133,9 @@ function ctmrgloop!(ctmrg::CTMRG, bulk; bonddim=2, verbosity=1, tol=1e-12, maxit
         error = ctmerror!(S1, S2, S3, S4, ctmrg.corners)
 
         verbosity > 0 && @info "\t Step $(iterations): error ≈ $(error)"
+
+        Z = tracecontract(ctmrg, bulk)
+        # println(Z)
 
         iterations += 1
     end
@@ -237,6 +242,7 @@ function ctmrgmove!(ctmrg::CTMRG, proj::Projectors, bulk, bonddim)
     C1, C2, C3, C4 = unpack(ctmrg.corners)
     T1, T2, T3, T4 = unpack(ctmrg.edges)
     UL, VL, UR, VR = unpack(proj)
+
     for x in axes(bulk, 1)
         for y in axes(bulk, 2)
             # println(x,"",y)
@@ -403,4 +409,45 @@ end
 #
 #     return UL, VL, UR, VR
 # end
-#
+
+function testctmrg(data_func)
+    βc = log(1 + sqrt(2)) / 2
+
+    s = ℂ^2
+
+    L = Lattice{1,1,Infinite}([s;;], true)
+    # L = Lattice{2,2,Infinite}([s s; s s], true)
+
+    bulk = x -> fill(TensorMap(ComplexF64.(data_func(x)[1]), one(s), s * s * s' * s'), L)
+    bulk_magn = x -> fill(TensorMap(data_func(x)[2], one(s), s * s * s' * s'), L)
+
+    rv = []
+    rv_exact = []
+
+    alg = BoundaryAlgorithm(; alg=VUMPS, bonddim=2, verbosity=1)
+
+    for x in 0.01:0.01:2
+        b1 = bulk(x * βc)
+        b2 = bulk_magn(x * βc)
+
+        state = alg(bulk(x * βc))
+
+        did_converge = false
+
+        numiter = 0
+        while !(did_converge) && numiter < 1
+            calculate!(state)
+            did_converge = state.info.converged
+            numiter += 1
+        end
+
+        Z = tracecontract(state.tensors, b1)
+        magn = tracecontract(state.tensors, b2) ./ Z
+        push!(rv, (magn))
+
+        M = abs((1 - sinh(2 * x * βc)^(-4)))^(1 / 8)
+        push!(rv_exact, M)
+    end
+
+    return rv, rv_exact
+end

@@ -30,7 +30,7 @@ function initpermuted(ctmrg::CTMRG)
 end
 
 function initprojectors(bulk, chi::IndexSpace)
-    _, bot_bonds, _, top_bonds = bondspaces_onlattice(bulk)
+    _, bot_bonds, _, top_bonds = _bondspaces(bulk)
 
     T = numbertype(bulk)
 
@@ -74,7 +74,7 @@ function initedges(f, bulk, chi::IndexSpace)
 
     el = numbertype(bulk)
 
-    east_bonds, south_bonds, west_bonds, north_bonds = bondspaces_onlattice(bulk)
+    east_bonds, south_bonds, west_bonds, north_bonds = _bondspaces(bulk)
 
     T1 = @. TensorMap(f, el, $circshift(north_bonds, (0, -1)), dom)
     T2 = @. TensorMap(f, el, $circshift(east_bonds, (-1, 0)), dom)
