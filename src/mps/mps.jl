@@ -12,10 +12,12 @@ struct MPS{
     AR::AType
     AC::AType
     function MPS(
-        AL::AType, C::CType, AR::AType, AC::AType
+        AL::AType, C::CType, AR::AType, AC::AType; check=true
     ) where {L,AType<:AbstractOnLattice{L},CType<:AbstractOnLattice{L}}
         mps = new{L,AType,CType}(AL, C, AR, AC)
-        validate(mps)
+        if check
+            validate(mps)
+        end
         return mps
     end
     function MPS(
@@ -38,6 +40,9 @@ getright(mps::AbstractMPS) = mps.AR
 getcentral(mps::AbstractMPS) = mps.AC
 
 unpack(mps::AbstractMPS) = (getleft(mps), getbond(mps), getright(mps), getcentral(mps))
+
+
+Base.similar(mps::MPS) = MPS(similar.(unpack(mps))...; check=false)::MPS
 
 function isgauged(mps_single::AbstractMPS{<:AbstractLattice{Nx,1}}) where {Nx}
     AL, C, AR, AC = unpack(mps_single)
@@ -160,3 +165,19 @@ end
 westbond(mps::MPS) = westbond.(mps.AC)
 
 # norm(A::AbstractMPS) = tr(c * c')
+
+function get_truncmetric_tensors(mps::MPS, bond::Bond)
+    bond_1 = bond
+    # bond_2 = nextrow(bond)
+
+    AC = getcentral(mps)
+    AR = getright(mps)
+
+    ac_u = AC[left(bond_1)]
+    ac_d = AC[left(bond_1) + CartesianIndex(0, 1)]
+
+    ar_u = AR[right(bond_1)]
+    ar_d = AR[right(bond_1) + CartesianIndex(0, 1)]
+
+    return ac_u, ac_d, ar_u, ar_d
+end

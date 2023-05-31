@@ -1,3 +1,14 @@
+abstract type AbstractCornerMethod <: AbstractBoundaryAlgorithm end
+
+@with_kw struct CTMRG <: AbstractCornerMethod
+    bonddim::Int
+    verbosity::Int = 0
+    maxiter::Int = 100
+    tol::Float64 = 1e-12
+    pinvtol::Float64 = 1e-7
+    svdalg::OrthogonalFactorizationAlgorithm = TensorKit.SVD()
+end
+
 abstract type AbstractCornerBoundary <: AbstractBoundary end
 
 corners(ctm::AbstractCornerBoundary) = ctm.corners
@@ -72,12 +83,10 @@ function updatecorners!(corners::Corners, corners_p::Corners)
     return corners
 end
 
-struct CTMRG{L,CType,TType,SVDAlg<:OrthogonalFactorizationAlgorithm} <:
+struct CornerMethodTensors{L,CType,TType,SVDAlg<:OrthogonalFactorizationAlgorithm} <:
        AbstractCornerBoundary
     corners::Corners{L,CType}
     edges::Edges{L,TType}
-    pinvtol::Float64
-    svdalg::SVDAlg
     # function CTMRG(
     #     corners::Corners{L,CType},
     #     edges::Edges{L,TType},
@@ -88,18 +97,23 @@ struct CTMRG{L,CType,TType,SVDAlg<:OrthogonalFactorizationAlgorithm} <:
     # end
 end
 
-function CTMRG(corners, edges; pinvtol=1e-7, svdalg=TensorKit.SVD())
-    return CTMRG(corners, edges, pinvtol, svdalg)
+function CornerMethodTensors(corners, edges; pinvtol=1e-7, svdalg=TensorKit.SVD())
+    return CornerMethodTensors(corners, edges, pinvtol, svdalg)
 end
 
 ## Top level
 
-function calculate!(ctmrg::CTMRG, bulk; kwargs...)
+function calculate!(ctmrg::CornerMethodTensors, bulk; kwargs...)
     return ctmrgloop!(ctmrg, bulk; kwargs...)
 end
 
 function ctmrgloop!(
-    ctmrg::CTMRG, bulk::ContractableTensors; bonddim=2, verbosity=1, tol=1e-12, maxiter=100
+    ctmrg::CornerMethodTensors,
+    bulk::ContractableTensors;
+    bonddim=2,
+    verbosity=1,
+    tol=1e-12,
+    maxiter=100,
 )
     bondspace = dimtospace(bulk, bonddim)
 
@@ -134,7 +148,7 @@ function ctmrgloop!(
 
         verbosity > 0 && @info "\t Step $(iterations): error ≈ $(error)"
 
-        Z = tracecontract(ctmrg, bulk)
+        # Z = tracecontract(ctmrg, bulk)
         # println(Z)
 
         iterations += 1
@@ -145,7 +159,7 @@ end
 
 ## ERROR CALCULATION
 
-function ctmerror!(S1_old, S2_old, S3_old, S4_old, ctmrg::CTMRG)
+function ctmerror!(S1_old, S2_old, S3_old, S4_old, ctmrg::CornerMethodTensors)
     return ctmerror!(S1_old, S2_old, S3_old, S4_old, ctmrg.corners)
 end
 function ctmerror!(S1_old, S2_old, S3_old, S4_old, corners::Corners)
@@ -238,7 +252,7 @@ function biorth_truncation(U0, V0, xi; tol=1e-7, alg=TensorKit.SVD())
     return U, V
 end
 
-function ctmrgmove!(ctmrg::CTMRG, proj::Projectors, bulk, bonddim)
+function ctmrgmove!(ctmrg::CornerMethodTensors, proj::Projectors, bulk, bonddim)
     C1, C2, C3, C4 = unpack(ctmrg.corners)
     T1, T2, T3, T4 = unpack(ctmrg.edges)
     UL, VL, UR, VR = unpack(proj)
@@ -319,7 +333,7 @@ end
 swapvirtual(t::AbsTen{1,2}) = permute(t, (1,), (3, 2))
 swapvirtual(t::AbsTen{2,2}) = permute(t, (1, 2), (4, 3))
 
-function updatecorners!(ctmrg::CTMRG, ctmrg_p::CTMRG)
+function updatecorners!(ctmrg::CornerMethodTensors, ctmrg_p::CornerMethodTensors)
     updatecorners!(ctmrg.corners, ctmrg_p.corners)
     return ctmrg
 end
@@ -415,7 +429,7 @@ function testctmrg(data_func)
 
     s = ℂ^2
 
-    L = Lattice{1,1,Infinite}([s;;], true)
+    L = Lattice{3,3,Infinite}([s s s; s s s; s s s], true)
     # L = Lattice{2,2,Infinite}([s s; s s], true)
 
     bulk = x -> fill(TensorMap(ComplexF64.(data_func(x)[1]), one(s), s * s * s' * s'), L)
@@ -424,9 +438,9 @@ function testctmrg(data_func)
     rv = []
     rv_exact = []
 
-    alg = BoundaryAlgorithm(; alg=VUMPS, bonddim=2, verbosity=1)
+    alg = BoundaryAlgorithm(; alg=VUMPSTensors, bonddim=2, verbosity=1)
 
-    for x in 0.01:0.01:2
+    for x in 0.01:0.1:2
         b1 = bulk(x * βc)
         b2 = bulk_magn(x * βc)
 

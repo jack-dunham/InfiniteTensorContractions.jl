@@ -131,7 +131,7 @@ function halfcontract(C1_00, T1_10::AbsTen{2,2}, T1_20, C2_30, T4_01, M_11, M_21
     return top
 end
 
-function tracecontract(ctmrg::CTMRG, bulk::ContractableTensors)
+function tracecontract(ctmrg::CornerMethodTensors, bulk::ContractableTensors)
     cor = corners(ctmrg)
     edg = edges(ctmrg)
 
@@ -192,6 +192,31 @@ function onelocalcontract!(
     return rv
 end
 
+function metric(pepo::AbstractPEPO, ctmrg::CornerMethodTensors, bond::Bond)
+    return ctmrg_trunctensors(pepo, ctmrg, bond)
+end
+
+function ctmrg_trunctensors(pepo, ctmrg, bond)
+    l = left(bond)
+    r = right(bond)
+
+    corners = ctmrg.corners
+    edges = ctmrg.edges
+
+    cs = corners[l[1]:r[1], l[2]]
+    t1s, t2s, t3s, t4s = edges[l[1]:r[1], l[2]]
+
+    ms = pepo[bond]
+
+    return truncmetriccontract(cs..., t1s..., t2s..., t3s..., t4s..., ms...)
+end
+
+function truncmetriccontract(C1, C2, C3, C4, T1_1, T1_2, T2, T3_1, T3_2, T4, M1, M2)
+    sp = domain(M1)[1] * domain(M1)[1]
+    dst = similar(M1, sp, sp)
+    return truncmetriccontract!(dst, C1, T1_1, T1_2, C2, T4, M1, M2, T2, C4, T3_1, T3_2, C3)
+end
+
 function truncmetriccontract!(
     dst, C1_00, T1_10, T1_20, C2_30, T4_01, M_11, M_21, T2_31, C4_02, T3_12, T3_22, C3_32
 )
@@ -229,7 +254,7 @@ function truncmetriccontract!(
     ) dst[D7 E1; D1 E7] =
         C1_00[x1 x4] *
         T1_10[D4 E4; x2 x1] *
-        T1_20[D7 E7; x3 x2] *
+        T1_20[D8 E8; x3 x2] *
         C2_30[x3 x5] *
         T4_01[D3 E3; x6 x4] *
         M_11[k1 b1; D1 D2 D3 D4] *

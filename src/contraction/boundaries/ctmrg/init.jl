@@ -1,21 +1,19 @@
-function inittensors(
-    f, bulk::ContractableTensors, alg::BoundaryAlgorithm{Alg}
-) where {Alg<:AbstractCornerBoundary}
+function inittensors(bulk::ContractableTensors, alg::AbstractCornerMethod; f=rand)
     # Convert the bond dimension into an IndexSpace
     chi = dimtospace(bulk, alg.bonddim)
 
-    return inittensors(f, Alg, bulk, chi)
+    return inittensors(f, alg, bulk, chi)
 end
 function inittensors(
-    f, ::Type{<:CTMRG}, bulk::ContractableTensors, bonddim::IndexSpace; kwargs...
+    f, alg::AbstractCornerMethod, bulk::ContractableTensors, bonddim::IndexSpace
 )
     corners = initcorners(f, bulk, bonddim)
     edges = initedges(f, bulk, bonddim)
 
-    return CTMRG(corners, edges; kwargs...)
+    return CornerMethodTensors(corners, edges)
 end
 
-function initpermuted(ctmrg::CTMRG)
+function initpermuted(ctmrg::CornerMethodTensors)
     C1_t, C2_t, C3_t, C4_t = transpose.(unpack(ctmrg.corners))
     C1_tp = permute.(C1_t, Ref(()), Ref((2, 1)))
     C3_tp = permute.(C3_t, Ref(()), Ref((2, 1)))
@@ -26,7 +24,7 @@ function initpermuted(ctmrg::CTMRG)
 
     edges_p = Edges(T4_t, T3_t, T2_t, T1_t)
 
-    return CTMRG(corners_p, edges_p)
+    return CornerMethodTensors(corners_p, edges_p)
 end
 
 function initprojectors(bulk, chi::IndexSpace)
@@ -84,7 +82,7 @@ function initedges(f, bulk, chi::IndexSpace)
     return Edges(T1, T2, T3, T4)
 end
 
-function initerror(ctmrg::CTMRG)
+function initerror(ctmrg::CornerMethodTensors)
     temp_tsvd = x -> tsvd(x)[2]
     # Permute into some form compatible with tsvd
     S1, S2, S3, S4 = map(

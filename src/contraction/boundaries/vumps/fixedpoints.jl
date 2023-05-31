@@ -8,6 +8,14 @@ end
 
 FixedPoints(f, mps::MPS, bulk::ContractableTensors) = initfixedpoints(f, mps, bulk)
 
+Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
+
+function get_truncmetric_tensors(fp::FixedPoints, bond::Bond)
+    l = left(bond)
+    r = right(bond)
+    return fp.left[l], fp.right[r]
+end
+
 # This fucking sucks. Just get indexes from mps and bulk cos this aint type stable
 # for some stupid reason
 function initfixedpoints(f, mps::MPS, bulk::ContractableTensors)
@@ -126,7 +134,7 @@ function fixedpoints!(
 
         NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
 
-        # NN = sqrt(NN)
+        NN = sqrt(NN)
 
         # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
         rmul!(FL[1, y], 1 / NN) #correct NN
@@ -139,8 +147,16 @@ function fixedpoints!(
 
             NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
 
-            rmul!(FR[x, y], 1 / NN)
-            rmul!(FL[x + 1, y], 1 / NN)
+            rmul!(FR[x, y], 1 / sqrt(NN))
+            rmul!(FL[x + 1, y], 1 / sqrt(NN))
+        end
+
+        # First x seems to be normalized, but not second x
+        for x in 1:Nx
+            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            # @warn "NN: $((x,y)),  $NN"
+            # rmul!(FR[x, y], 1 / (NN))
+            # rmul!(FL[x + 1, y], 1 / (NN))
         end
     end
     return fpoints

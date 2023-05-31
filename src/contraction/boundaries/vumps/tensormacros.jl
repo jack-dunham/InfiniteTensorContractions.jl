@@ -37,13 +37,6 @@ function applyhc!(hc::AbsTen{0,2}, c::AbsTen{0,2}, fl::AbsTen{2,2}, fr::AbsTen{2
     @tensoropt hc[x4 x3] = c[x2 x1] * fl[D E; x1 x3] * fr[D E; x2 x4]
 end
 
-function tracecontract(vumps::VUMPS, bulk)
-    AC = getcentral(vumps.mps)
-    FL = vumps.fixedpoints.left
-    FR = vumps.fixedpoints.right
-    return tracecontract.(FL, FR, AC, circshift(AC, (0, -1)), bulk)
-end
-
 function tracecontract(FL_00, FR_00, AT_00, AB_01, M_00)
     @tensoropt rv =
         FL_00[D3; x1 x3] *
@@ -53,52 +46,28 @@ function tracecontract(FL_00, FR_00, AT_00, AB_01, M_00)
         (AB_01')[x4 x3; D2]
     return rv
 end
-
+function onelocalcontract(FL_00, FR_00, AT_00, AB_01, M_00)
+    c = codomain(M_00)[1]
+    dst = similar(M_00, c, c)
+    return onelocalcontract!(dst, FL_00, FR_00, AT_00, AB_01, M_00)
+end
 function onelocalcontract!(dst, FL_00, FR_00, AT_00, AB_01, M_00)
-    @tensoropt dst[k b] =
+    @tensoropt dst[k; b] =
         FL_00[D3; x1 x3] *
         AT_00[D4; x2 x1] *
         FR_00[D1; x2 x4] *
         M_00[k b; D1 D2 D3 D4] *
         (AB_01')[x4 x3; D2]
-    return rv
+    return dst
 end
 
-function truncmetric(boundary::AbstractBoundary, bulk::ContractableTensors)
-    sp = @. domain(bulk, 1) * domain(bulk, 1)
-    dst = similar.(bulk, sp, sp)
-    return truncmetric!(dst, boundary, bulk)
-end
-function truncmetric!(dst, vumps::VUMPS, bulk::ContractableTensors)
-    mps = vumps.mps
-
-    AC = getcentral(mps)
-    AR = getright(mps)
-
-    FL = vumps.fixedpoints.left
-    FR = vumps.fixedpoints.right
-
-    # for x in axes(bulk, 1)
-    #     for y in axes(bulk, 2)
-    #         truncmetriccontract!(dst[x,y],FL[x,y],AC[x,y],AC[x,y+1],AR[x+1,y],AR[x+1,y+1],bulk[x,y],bulk[x+1,y],FR[x+1,y])
-    #     end
-    # end
-    #
-    # return dst
-    
-    return truncmetriccontract!.(dst,
-        FL,
-        AC,
-        circshift(AC, (0, -1)),
-        circshift(AR, (-1, 0)),
-        circshift(AR, (-1, -1)),
-        bulk,
-        circshift(bulk, (-1, 0)),
-        circshift(FR, (-1, 0)),
-    )
+function truncmetriccontract(FL_00, FR_10, AC_00, AC_01, AR_10, AR_11, M_00, M_10)
+    sp = domain(M_00)[1] * domain(M_00)[1]
+    dst = similar(FL_00, sp, sp)
+    return truncmetriccontract!(dst, FL_00, FR_10, AC_00, AC_01, AR_10, AR_11, M_00, M_10)
 end
 
-function truncmetriccontract!(dst, FL_00, AC_00, AC_01, AR_10, AR_11, M_00, M_10, FR_10)
+function truncmetriccontract!(dst, FL_00, FR_10, AC_00, AC_01, AR_10, AR_11, M_00, M_10)
     @tensoropt (
         k1 => 2,
         k2 => 2,

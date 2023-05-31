@@ -1,19 +1,17 @@
 abstract type AbstractBoundaryAlgorithm <: AbstractContractionAlgorithm end
 abstract type AbstractBoundary end
-abstract type AbstractBoundaryState{B<:AbstractBoundary} end
-
-@with_kw struct BoundaryAlgorithm{B<:AbstractBoundary} <: AbstractBoundaryAlgorithm
-    alg::Type{B}
-    bonddim::Int
-    verbosity::Int = 0
-    maxiter::Int = 100
-    tol::Float64 = 1e-12
-end
+abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} end
 
 function similarboundary(
-    ::Type{Alg}, alg::AbstractBoundaryAlgorithm
-) where {Alg<:AbstractBoundary}
-    return BoundaryAlgorithm(Alg, alg.bonddim, alg.verbosity, alg.maxiter, alg.tol)
+    ::Type{Alg}, alg::AbstractBoundaryAlgorithm; kwargs...
+) where {Alg<:AbstractBoundaryAlgorithm}
+    return Alg(;
+        bonddim=alg.bonddim,
+        verbosity=alg.verbosity,
+        maxiter=alg.maxiter,
+        tol=alg.tol,
+        kwargs...,
+    )
 end
 
 @doc raw"""
@@ -30,12 +28,43 @@ can be one of `VUMPS`, `CTMRG`, `FPCM`, `FPCM_CTMRG`, or a user-defined algorith
 - `info::ConvergenceInfo`: information about the covergence progress of the algorithm
 - `param::BoundaryParameters`: the paramaters used in the algorithm
 """
-struct BoundaryState{B} <: AbstractBoundaryState{B}
-    initial::B
-    bulk
-    alg::BoundaryAlgorithm{B}
-    tensors::B
+struct BoundaryState{
+    Alg<:AbstractBoundaryAlgorithm,
+    BulkType<:AbstractBulkTensors,
+    BoundaryType<:AbstractBoundary,
+} <: AbstractBoundaryState{Alg}
+    tensors::BoundaryType
+    initial_tensors::BoundaryType
+    bulk::BulkType
+    alg::Alg
     info::ConvergenceInfo
+    function BoundaryState(
+        tensors::BoundaryType,
+        initial_tensors::BoundaryType,
+        bulk::BulkType,
+        alg::Alg,
+        info::ConvergenceInfo,
+    ) where {
+        BoundaryType<:AbstractBoundary,
+        BulkType<:AbstractBulkTensors,
+        Alg<:AbstractBoundaryAlgorithm,
+    }
+        btype = contraction_boundary_type(tensors)
+        if !(btype == typeof(alg))
+            throw(ArgumentError("Incompatible type of boundary for algorithm provided"))
+        else
+            return new{Alg,BulkType,BoundaryType}(tensors, initial_tensors, bulk, alg, info)
+        end
+    end
+end
+
+function BoundaryState(tensors, bulk, alg; info=ConvergenceInfo(), store_initial=false)
+    if store_initial
+        initial = deepcopy(tensors)
+    else
+        initial = similar(tensors)
+    end
+    return BoundaryState(tensors, initial, bulk, alg, info)
 end
 
 @doc raw"""
@@ -44,7 +73,7 @@ end
 Initialise the boundary tensors compatible with lattice `T` for use in boundary algorithm
 `alg`.
 """
-function inittensors(f, T, alg::BoundaryAlgorithm) end
+function inittensors(f, T, alg::AbstractBoundaryAlgorithm) end
 
 # @doc raw"""
 # Initilise a new `alg` boundary algorithm state for contracting the infinite lattice
@@ -56,13 +85,12 @@ function inittensors(f, T, alg::BoundaryAlgorithm) end
 #     return boundary = inittensors(f, T, alg)
 # end
 
-(alg::BoundaryAlgorithm)(bulk) = alg(rand, bulk)
-function (alg::BoundaryAlgorithm)(f, bulk)
-    boundary = inittensors(f, bulk, alg)
-    return alg(boundary, bulk)
+function initenvironment(bulk, alg::AbstractBoundaryAlgorithm; kwargs...)
+    tensors = inittensors(detrace(bulk), alg; kwargs...)
+    return initenvironment(tensors, bulk, alg; kwargs...)
 end
-function (alg::BoundaryAlgorithm)(boundary::AbstractBoundary, bulk)
-    return BoundaryState(boundary, bulk, alg, boundary, ConvergenceInfo())
+function initenvironment(tensors, bulk, alg; kwargs...)
+    return BoundaryState(tensors, bulk, alg; kwargs...)
 end
 
 @doc raw"""
@@ -104,4 +132,10 @@ function similarboundary(
     new_alg = similarboundary(Alg, state.alg)
     new_state = new_alg(bulk)
     return new_state
+end
+
+function truncmetric(boundary::AbstractBoundary, bulk::ContractableTensors)
+    sp = @. domain(bulk, 1) * domain(bulk, 1)
+    dst = similar.(bulk, sp, sp)
+    return truncmetric!(dst, boundary, bulk)
 end
