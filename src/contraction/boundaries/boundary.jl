@@ -1,5 +1,5 @@
+abstract type AbstractBoundary <: AbstractEnvironment end
 abstract type AbstractBoundaryAlgorithm <: AbstractContractionAlgorithm end
-abstract type AbstractBoundary end
 abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} end
 
 function similarboundary(
@@ -30,7 +30,7 @@ can be one of `VUMPS`, `CTMRG`, `FPCM`, `FPCM_CTMRG`, or a user-defined algorith
 """
 struct BoundaryState{
     Alg<:AbstractBoundaryAlgorithm,
-    BulkType<:AbstractBulkTensors,
+    BulkType<:ContractableObjects,
     BoundaryType<:AbstractBoundary,
 } <: AbstractBoundaryState{Alg}
     tensors::BoundaryType
@@ -73,7 +73,7 @@ end
 Initialise the boundary tensors compatible with lattice `T` for use in boundary algorithm
 `alg`.
 """
-function inittensors(f, T, alg::AbstractBoundaryAlgorithm) end
+function inittensors(f, bulk, alg::AbstractBoundaryAlgorithm) end
 
 # @doc raw"""
 # Initilise a new `alg` boundary algorithm state for contracting the infinite lattice
