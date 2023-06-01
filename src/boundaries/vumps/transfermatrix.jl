@@ -1,4 +1,4 @@
-struct TransferMatrix{A<:TenAbs{2},M<:Union{AbsTen{0,4},AbsTen{2,4}}}
+struct TransferMatrix{A<:TenAbs{2},M<:Union{AbsTen{0,4},AbsTen{1,4},AbsTen{2,4}}}
     above::A
     middle::M
     below::A
@@ -8,7 +8,7 @@ function Base.eltype(t::TransferMatrix)
     return promote_type(eltype(t.above), eltype(t.middle), eltype(t.below))
 end
 
-const TransferMatrices{L} = OnLattice{L,<:TransferMatrix}
+const AbstractTransferMatrices{T} = AbstractUnitCell{T<:TransferMatrix}
 
 # Regular is for getting correct space of resulting F, _ function is for getting 
 # correct space compatible F
