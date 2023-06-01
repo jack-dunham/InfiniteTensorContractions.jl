@@ -19,6 +19,7 @@ include("boundaries/vumps/abstractmps.jl")
 # include("boundaries/vumps/abstractfixedpoints.jl")
 # include("boundaries/vumps/abstracttransfermatrix.jl")
 ## methods
+include("boundaries/vumps/transfermatrix.jl")
 include("boundaries/vumps/fixedpoints.jl")
 include("boundaries/vumps/mpsgauge.jl")
 

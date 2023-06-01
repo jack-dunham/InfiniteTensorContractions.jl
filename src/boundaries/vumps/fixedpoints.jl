@@ -1,24 +1,28 @@
+# DONE (NEEDS RESTRUCTURING)
 abstract type AbstractFixedPoints end
 
 # Fixed points of a transfer matrix
-struct FixedPoints{Lat<:AbstractLattice,FP<:TenAbs{2}} <: AbstractFixedPoints
-    left::OnLattice{Lat,FP,Matrix{FP}}
-    right::OnLattice{Lat,FP,Matrix{FP}}
+struct FixedPoints{A<:AbstractUnitCell{<:TenAbs{2}}} <: AbstractFixedPoints
+    left::A
+    right::A
+    function FixedPoints(left::A, right::A) where {A}
+        check_size_allequal(left, right)
+        return new{A}(left, right)
+    end
 end
 
-FixedPoints(f, mps::MPS, bulk::ContractableTensors) = initfixedpoints(f, mps, bulk)
+FixedPoints(f, mps::MPS, bulk) = initfixedpoints(f, mps, bulk)
 
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
+# DEPREC
 function get_truncmetric_tensors(fp::FixedPoints, bond::Bond)
     l = left(bond)
     r = right(bond)
     return fp.left[l], fp.right[r]
 end
 
-# This fucking sucks. Just get indexes from mps and bulk cos this aint type stable
-# for some stupid reason
-function initfixedpoints(f, mps::MPS, bulk::ContractableTensors)
+function initfixedpoints(f, mps::MPS, bulk)
     mps_tensor = getcentral(mps)
     bulk_tensor = convert.(TensorMap, bulk)
     left = _initfixedpoints.(f, mps_tensor, bulk_tensor, :left)
@@ -85,14 +89,14 @@ function hcapply!(
     return hc
 end
 
-function fixedpoints(mps::MPS, bulk::ContractableTensors)
+function fixedpoints(mps::MPS, bulk)
     initial_fpoints = FixedPoints(rand, mps, bulk)
     return fixedpoints!(initial_fpoints, mps, bulk)
 end
 
 #this is now the correct env func
 
-function fixedpoints!(fpoints::FixedPoints, mps::MPS, bulk::ContractableTensors)
+function fixedpoints!(fpoints::FixedPoints, mps::MPS, bulk)
     AL, C, AR, _ = unpack(mps)
     tm_left = TransferMatrix.(AL, bulk, circshift(AL, (0, -1)))
     tm_right = TransferMatrix.(AR, bulk, circshift(AR, (0, -1)))
@@ -104,7 +108,7 @@ function fixedpoints!(
     fpoints::FixedPoints,
     tm_left::TransferMatrices,
     tm_right::TransferMatrices,
-    C::AbstractOnLattice,
+    C::AbstractUnitCell,
 )
     FL = fpoints.left
     FR = fpoints.right
@@ -129,10 +133,10 @@ function fixedpoints!(
         for x in 2:Nx
             # FL[x, y] =
             #     FL[x - 1, y] * TransferMatrix(AL[x - 1, y], M[x - 1, y], AL[x - 1, y + 1])#works
-            multransfer!(FL[x, y], FL[x - 1, y], tm_left[x - 1, y])
+            multransfer!(FL[x, y], FL[x-1, y], tm_left[x-1, y])
         end
 
-        NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
+        NN = renorm(C[Nx, y+1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
 
         NN = sqrt(NN)
 
@@ -140,20 +144,20 @@ function fixedpoints!(
         rmul!(FL[1, y], 1 / NN) #correct NN
         rmul!(FR[end, y], 1 / NN) #correct NN
 
-        for x in (Nx - 1):-1:1
+        for x in (Nx-1):-1:1
             # FR[x, y] =
             #     TransferMatrix(AR[x + 1, y], M[x + 1, y], AR[x + 1, y + 1]) * FR[x + 1, y]#works
-            multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
+            multransfer!(FR[x, y], tm_right[x+1, y], FR[x+1, y])
 
-            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            NN = renorm(C[x, y+1], C[x, y], FL[x+1, y], FR[x, y])
 
             rmul!(FR[x, y], 1 / sqrt(NN))
-            rmul!(FL[x + 1, y], 1 / sqrt(NN))
+            rmul!(FL[x+1, y], 1 / sqrt(NN))
         end
 
         # First x seems to be normalized, but not second x
         for x in 1:Nx
-            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            NN = renorm(C[x, y+1], C[x, y], FL[x+1, y], FR[x, y])
             # @warn "NN: $((x,y)),  $NN"
             # rmul!(FR[x, y], 1 / (NN))
             # rmul!(FL[x + 1, y], 1 / (NN))
@@ -194,12 +198,12 @@ function simple_environments!(FL, FR, A, M)
     return FL, FR
 end
 
-function fpsolve(fl::AbsTen{1,2}, A::OnLattice, M, x::Int, y::Int)
+function fpsolve(fl::AbsTen{1,2}, A::AbstractUnitCell, M, x::Int, y::Int)
     Nx = size(A)[1]
     fl_n = flsolve(fl, A, M, x, y, Val(Nx))
     return fl_n
 end
-function fpsolve(fr::AbsTen{2,1}, A::OnLattice, M, x::Int, y::Int)
+function fpsolve(fr::AbsTen{2,1}, A::AbstractUnitCell, M, x::Int, y::Int)
     Nx = size(A)[1]
     fr_n = frsolve(fr, A, M, x, y, Val(Nx))
     return fr_n
@@ -217,7 +221,7 @@ function flsolve(
     flu = similar(fl)
     @tensoropt begin
         flu[8; 6 7] =
-            fl[3; 1 2] * (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5]
+            fl[3; 1 2] * (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y+1]')[8; 3 5]
     end
     return flu
 end
@@ -235,10 +239,10 @@ function flsolve(
             fl[3; 1 2] *
             (a[x, y])[1 4; 6] *
             (m[x, y])[2 5; 7 4] *
-            (a[x, y + 1]')[8; 3 5] *
-            (a[x + 1, y])[6 9; 11] *
-            (m[x + 1, y])[7 10; 12 9] *
-            (a[x + 1, y + 1]')[13; 8 10]
+            (a[x, y+1]')[8; 3 5] *
+            (a[x+1, y])[6 9; 11] *
+            (m[x+1, y])[7 10; 12 9] *
+            (a[x+1, y+1]')[13; 8 10]
     end
     return flu
 end
@@ -257,13 +261,13 @@ function flsolve(
             fl[3; 1 2] *
             (a[x, y])[1 4; 6] *
             (m[x, y])[2 5; 7 4] *
-            (a[x, y + 1]')[8; 3 5] *
-            (a[x + 1, y])[6 9; 11] *
-            (m[x + 1, y])[7 10; 12 9] *
-            (a[x + 1, y + 1]')[13; 8 10] *
-            (a[x + 2, y])[11 14; 16] *
-            (m[x + 2, y])[12 15; 17 14] *
-            (a[x + 2, y + 1]')[18; 13 15]
+            (a[x, y+1]')[8; 3 5] *
+            (a[x+1, y])[6 9; 11] *
+            (m[x+1, y])[7 10; 12 9] *
+            (a[x+1, y+1]')[13; 8 10] *
+            (a[x+2, y])[11 14; 16] *
+            (m[x+2, y])[12 15; 17 14] *
+            (a[x+2, y+1]')[18; 13 15]
     end
     return flu
 end
@@ -280,7 +284,7 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5] * fr[6 7; 8]
+            (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y+1]')[8; 3 5] * fr[6 7; 8]
     end
     return fru
 end
@@ -295,12 +299,12 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x - 1, y])[1 4; 6] *
-            (m[x - 1, y])[2 5; 7 4] *
-            (a[x - 1, y + 1]')[8; 3 5] *
+            (a[x-1, y])[1 4; 6] *
+            (m[x-1, y])[2 5; 7 4] *
+            (a[x-1, y+1]')[8; 3 5] *
             (a[x, y])[6 9; 11] *
             (m[x, y])[7 10; 12 9] *
-            (a[x, y + 1]')[13; 8 10] *
+            (a[x, y+1]')[13; 8 10] *
             fr[11 12; 13]
     end
     return fru
@@ -316,15 +320,15 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x - 2, y])[1 4; 6] *
-            (m[x - 2, y])[2 5; 7 4] *
-            (a[x - 2, y + 1]')[8; 3 5] *
-            (a[x - 1, y])[6 9; 11] *
-            (m[x - 1, y])[7 10; 12 9] *
-            (a[x - 1, y + 1]')[13; 8 10] *
+            (a[x-2, y])[1 4; 6] *
+            (m[x-2, y])[2 5; 7 4] *
+            (a[x-2, y+1]')[8; 3 5] *
+            (a[x-1, y])[6 9; 11] *
+            (m[x-1, y])[7 10; 12 9] *
+            (a[x-1, y+1]')[13; 8 10] *
             (a[x, y])[11 14; 16] *
             (m[x, y])[12 15; 17 14] *
-            (a[x, y + 1]')[18; 13 15] *
+            (a[x, y+1]')[18; 13 15] *
             fr[16 17; 18]
     end
     return fru
