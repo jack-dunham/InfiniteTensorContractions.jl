@@ -5,32 +5,32 @@ abstract type AbstractCornerMethod <: AbstractBoundaryAlgorithm end
     verbosity::Int = 0
     maxiter::Int = 100
     tol::Float64 = 1e-12
-    pinvtol::Float64 = 1e-7
-    svdalg::OrthogonalFactorizationAlgorithm = TensorKit.SVD()
+    ptol::Float64 = 1e-7
+    svd_alg::OrthogonalFactorizationAlgorithm = TensorKit.SVD()
 end
 
-abstract type AbstractCornerBoundary <: AbstractBoundary end
+abstract type AbstractCornerBoundary <: AbstractBoundaryTensors end
 
 corners(ctm::AbstractCornerBoundary) = ctm.corners
 edges(ctm::AbstractCornerBoundary) = ctm.edges
 
-struct Corners{L,CType}
-    C1::OnLattice{L,CType,Matrix{CType}}
-    C2::OnLattice{L,CType,Matrix{CType}}
-    C3::OnLattice{L,CType,Matrix{CType}}
-    C4::OnLattice{L,CType,Matrix{CType}}
+struct Corners{A<:AbstractUnitCell}
+    C1::A
+    C2::A
+    C3::A
+    C4::A
 end
-struct Edges{L,TType}
-    T1::OnLattice{L,TType,Matrix{TType}}
-    T2::OnLattice{L,TType,Matrix{TType}}
-    T3::OnLattice{L,TType,Matrix{TType}}
-    T4::OnLattice{L,TType,Matrix{TType}}
+struct Edges{A<:AbstractUnitCell}
+    T1::A
+    T2::A
+    T3::A
+    T4::A
 end
-struct Projectors{L,PType}
-    UL::OnLattice{L,PType,Matrix{PType}}
-    VL::OnLattice{L,PType,Matrix{PType}}
-    UR::OnLattice{L,PType,Matrix{PType}}
-    VR::OnLattice{L,PType,Matrix{PType}}
+struct Projectors{A<:AbstractUnitCell}
+    UL::A
+    VL::A
+    UR::A
+    VR::A
 end
 
 unpack(ctm::Corners) = ctm.C1, ctm.C2, ctm.C3, ctm.C4
@@ -47,10 +47,10 @@ function Base.getindex(corners::Corners, i...)
     x2 = lastindex(x)
     y2 = lastindex(y)
 
-    c1 = C1[x1 - 1, y1 - 1]
-    c2 = C2[x2 + 1, y1 - 1]
-    c3 = C3[x2 + 1, y2 + 1]
-    c4 = C4[x1 - 1, y2 + 1]
+    c1 = C1[x1-1, y1-1]
+    c2 = C2[x2+1, y1-1]
+    c3 = C3[x2+1, y2+1]
+    c4 = C4[x1-1, y2+1]
 
     return c1, c2, c3, c4
 end
@@ -66,10 +66,10 @@ function Base.getindex(edges::Edges, i...)
     y2 = lastindex(y)
 
     @views begin
-        t1s = T1[x1:x2, y1 - 1]
-        t2s = T2[x2 + 1, y1:y2]
-        t3s = T3[x1:x2, y2 + 1]
-        t4s = T4[x1 - 1, y1:y2]
+        t1s = T1[x1:x2, y1-1]
+        t2s = T2[x2+1, y1:y2]
+        t3s = T3[x1:x2, y2+1]
+        t4s = T4[x1-1, y1:y2]
     end
 
     return t1s, t2s, t3s, t4s
@@ -109,13 +109,14 @@ end
 
 function ctmrgloop!(
     ctmrg::CornerMethodTensors,
-    bulk::ContractableTensors;
+    bulk,
     bonddim=2,
     verbosity=1,
     tol=1e-12,
     maxiter=100,
+    kwargs...,
 )
-    bondspace = dimtospace(bulk, bonddim)
+    bondspace = dimtospace(spacetype(bulk), bonddim)
 
     ctmrg_p = initpermuted(ctmrg)
     bulk_p = swapaxes.(bulk)
@@ -133,13 +134,13 @@ function ctmrgloop!(
 
     while error > tol && iterations < maxiter
         # Sweep along the x axis (left/right)
-        ctmrgmove!(ctmrg, x_projectors, bulk, bonddim)
+        ctmrgmove!(ctmrg, x_projectors, bulk, bonddim; kwargs...)
 
         # Write updated tensors into the permuted placeholders
         updatecorners!(ctmrg_p, ctmrg)
 
         # Sweep along the y axis (up/down)
-        ctmrgmove!(ctmrg_p, y_projectors, bulk_p, bonddim)
+        ctmrgmove!(ctmrg_p, y_projectors, bulk_p, bonddim; kwargs...)
 
         # Update the unpermuted (true) tensors.
         updatecorners!(ctmrg, ctmrg_p)
@@ -177,7 +178,7 @@ function ctmerror!(S_old::AbstractMatrix, C_new::AbstractMatrix)
     return err
 end
 
-function ctmerror(s_old::AbsTen{1,1}, c_new::AbstractTensorMap)
+function ctmerror(c_new::AbstractTensorMap)
     _, s_new, _ = tsvd(c_new, (1,), (2,))
     normalize!(s_new)
     return s_new
@@ -203,7 +204,7 @@ function projectors(
     M_12,
     M_22,
     bonddim;
-    kwargs...,
+    kwargs...
 )
     # Top
     top = halfcontract(C1_00, T1_10, T1_20, C2_30, T4_01, M_11, M_21, T2_31)
@@ -252,7 +253,7 @@ function biorth_truncation(U0, V0, xi; tol=1e-7, alg=TensorKit.SVD())
     return U, V
 end
 
-function ctmrgmove!(ctmrg::CornerMethodTensors, proj::Projectors, bulk, bonddim)
+function ctmrgmove!(ctmrg::CornerMethodTensors, proj::Projectors, bulk, bonddim; kwargs...)
     C1, C2, C3, C4 = unpack(ctmrg.corners)
     T1, T2, T3, T4 = unpack(ctmrg.edges)
     UL, VL, UR, VR = unpack(proj)
@@ -260,60 +261,59 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, proj::Projectors, bulk, bonddim)
     for x in axes(bulk, 1)
         for y in axes(bulk, 2)
             # println(x,"",y)
-            UL[x + 0, y + 1], VL[x + 0, y + 1], UR[x + 3, y + 1], VR[x + 3, y + 1] = projectors(
-                C1[x + 0, y + 0],
-                C2[x + 3, y + 0],
-                C3[x + 3, y + 3],
-                C4[x + 0, y + 3],
-                T1[x + 1, y + 0],
-                T1[x + 2, y + 0],
-                T2[x + 3, y + 1],
-                T2[x + 3, y + 2],
-                T3[x + 1, y + 3],
-                T3[x + 2, y + 3],
-                T4[x + 0, y + 1],
-                T4[x + 0, y + 2],
-                bulk[x + 1, y + 1],
-                bulk[x + 2, y + 1],
-                bulk[x + 1, y + 2],
-                bulk[x + 2, y + 2],
+            UL[x+0, y+1], VL[x+0, y+1], UR[x+3, y+1], VR[x+3, y+1] = projectors(
+                C1[x+0, y+0],
+                C2[x+3, y+0],
+                C3[x+3, y+3],
+                C4[x+0, y+3],
+                T1[x+1, y+0],
+                T1[x+2, y+0],
+                T2[x+3, y+1],
+                T2[x+3, y+2],
+                T3[x+1, y+3],
+                T3[x+2, y+3],
+                T4[x+0, y+1],
+                T4[x+0, y+2],
+                bulk[x+1, y+1],
+                bulk[x+2, y+1],
+                bulk[x+1, y+2],
+                bulk[x+2, y+2],
                 bonddim;
-                tol=ctmrg.pinvtol,
-                alg=ctmrg.svdalg,
+                kwargs...
             )
         end
         for y in axes(bulk, 2)
             projectcorner!(
-                C1[x + 1, y + 0], C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
+                C1[x+1, y+0], C1[x+0, y+0], T1[x+1, y+0], VL[x+0, y+0]
             )
             projectcorner!(
-                C2[x + 2, y + 0],
-                C2[x + 3, y + 0],
-                swapvirtual(T1[x + 2, y + 0]),
-                VR[x + 3, y + 0],
+                C2[x+2, y+0],
+                C2[x+3, y+0],
+                swapvirtual(T1[x+2, y+0]),
+                VR[x+3, y+0],
             )
             projectcorner!(
-                C3[x + 2, y + 3], C3[x + 3, y + 3], T3[x + 2, y + 3], UR[x + 3, y + 2]
+                C3[x+2, y+3], C3[x+3, y+3], T3[x+2, y+3], UR[x+3, y+2]
             )
             projectcorner!(
-                C4[x + 1, y + 3],
-                C4[x + 0, y + 3],
-                swapvirtual(T3[x + 1, y + 3]),
-                UL[x + 0, y + 2],
+                C4[x+1, y+3],
+                C4[x+0, y+3],
+                swapvirtual(T3[x+1, y+3]),
+                UL[x+0, y+2],
             )
             projectedge!(
-                T4[x + 1, y + 1],
-                T4[x + 0, y + 1],
-                bulk[x + 1, y + 1],
-                UL[x + 0, y + 0],
-                VL[x + 0, y + 1],
+                T4[x+1, y+1],
+                T4[x+0, y+1],
+                bulk[x+1, y+1],
+                UL[x+0, y+0],
+                VL[x+0, y+1],
             )
             projectedge!(
-                T2[x + 2, y + 1],
-                T2[x + 3, y + 1],
-                invertaxes(bulk[x + 2, y + 1]),
-                VR[x + 3, y + 1],
-                UR[x + 3, y + 0],
+                T2[x+2, y+1],
+                T2[x+3, y+1],
+                invertaxes(bulk[x+2, y+1]),
+                VR[x+3, y+1],
+                UR[x+3, y+0],
             )
         end
     end

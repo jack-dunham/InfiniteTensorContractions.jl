@@ -1,11 +1,11 @@
-function inittensors(bulk::ContractableTensors, alg::AbstractCornerMethod; f=rand)
+function inittensors(bulk, alg::AbstractCornerMethod; f=rand)
     # Convert the bond dimension into an IndexSpace
     chi = dimtospace(bulk, alg.bonddim)
 
     return inittensors(f, alg, bulk, chi)
 end
 function inittensors(
-    f, alg::AbstractCornerMethod, bulk::ContractableTensors, bonddim::IndexSpace
+    f, alg::AbstractCornerMethod, bulk, bonddim::IndexSpace
 )
     corners = initcorners(f, bulk, bonddim)
     edges = initedges(f, bulk, bonddim)
@@ -39,7 +39,6 @@ end
 
 function _initprojectors(T::Type{<:Number}, top_bonds, bot_bonds, chi::IndexSpace)
     chi = Ref(chi)
-    LType = latticetype(typeof(top_bonds))
 
     UL = @. TensorMap(
         undef, T, adjoint(chi) * $circshift(top_bonds, (-1, -1)), adjoint(chi)
@@ -49,21 +48,23 @@ function _initprojectors(T::Type{<:Number}, top_bonds, bot_bonds, chi::IndexSpac
     UR = @. TensorMap(undef, T, chi * $circshift(top_bonds, (1, -1)), chi)
     VR = @. TensorMap(undef, T, adjoint(chi) * $circshift(bot_bonds, (1, 0)), adjoint(chi))
 
-    return Projectors(UL, VL, UR, VR)::Projectors{LType}
+    return Projectors(UL, VL, UR, VR)
 end
 
-function initcorners(f, bulk::ContractableTensors{L}, chi::IndexSpace) where {L}
+function initcorners(f, bulk, chi::S) where {S<:IndexSpace}
     nil = one(chi)
     nil = Ref(nil)
 
     el = numbertype(bulk)
 
-    chi_lat = fill(chi, lattice(bulk))
+    chi_uc = similar(bulk, S)
 
-    C1 = @. TensorMap(f, el, nil, chi_lat * chi_lat)
-    C2 = @. TensorMap(f, el, nil, adjoint(chi_lat) * adjoint(chi_lat))
-    C3 = @. TensorMap(f, el, nil, chi_lat * chi_lat)
-    C4 = @. TensorMap(f, el, nil, adjoint(chi_lat) * adjoint(chi_lat))
+    chi_uc = fill(chi_uc, chi)
+
+    C1 = @. TensorMap(f, el, nil, chi_uc * chi_uc)
+    C2 = @. TensorMap(f, el, nil, adjoint(chi_uc) * adjoint(chi_uc))
+    C3 = @. TensorMap(f, el, nil, chi_uc * chi_uc)
+    C4 = @. TensorMap(f, el, nil, adjoint(chi_uc) * adjoint(chi_uc))
 
     return Corners(C1, C2, C3, C4)
 end

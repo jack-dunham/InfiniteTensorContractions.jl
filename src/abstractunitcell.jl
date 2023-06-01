@@ -105,3 +105,12 @@ function check_size_allequal(ucs...)
     end
     return nothing
 end
+
+## TENSORS
+
+TensorKit.spacetype(::AbstractUnitCell{<:AbstractTensorMap{S}}) where {S} = S
+numbertype(::AbstractUnitCell{T}) where {T} = eltype(T)
+
+
+
+
