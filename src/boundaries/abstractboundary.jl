@@ -1,6 +1,7 @@
-abstract type AbstractBoundary <: AbstractEnvironment end
+abstract type AbstractBoundaryTensors <: AbstractContractionTensors end
 abstract type AbstractBoundaryAlgorithm <: AbstractContractionAlgorithm end
-abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} end
+abstract type AbstractBoundaryState{B} <: AbstractContractionState{B<:AbstractBoundaryAlgorithm}
+
 
 function similarboundary(
     ::Type{Alg}, alg::AbstractBoundaryAlgorithm; kwargs...
@@ -30,23 +31,23 @@ can be one of `VUMPS`, `CTMRG`, `FPCM`, `FPCM_CTMRG`, or a user-defined algorith
 """
 struct BoundaryState{
     Alg<:AbstractBoundaryAlgorithm,
-    BulkType<:ContractableObjects,
-    BoundaryType<:AbstractBoundary,
+    BuType<:AbstractUnitCell,
+    BoType<:AbstractBoundaryTenors,
 } <: AbstractBoundaryState{Alg}
-    tensors::BoundaryType
-    initial_tensors::BoundaryType
+    tensors::BoType
+    initial_tensors::BoType
     bulk::BulkType
     alg::Alg
     info::ConvergenceInfo
     function BoundaryState(
-        tensors::BoundaryType,
-        initial_tensors::BoundaryType,
-        bulk::BulkType,
+        tensors::BoType,
+        initial_tensors::BoType,
+        bulk::BuType,
         alg::Alg,
         info::ConvergenceInfo,
     ) where {
         BoundaryType<:AbstractBoundary,
-        BulkType<:AbstractBulkTensors,
+        BulkType<:AbstractUnitCell,
         Alg<:AbstractBoundaryAlgorithm,
     }
         btype = contraction_boundary_type(tensors)
@@ -85,21 +86,20 @@ function inittensors(f, bulk, alg::AbstractBoundaryAlgorithm) end
 #     return boundary = inittensors(f, T, alg)
 # end
 
-function initenvironment(bulk, alg::AbstractBoundaryAlgorithm; kwargs...)
+function initialize(bulk, alg::AbstractBoundaryAlgorithm; kwargs...)
     tensors = inittensors(detrace(bulk), alg; kwargs...)
-    return initenvironment(tensors, bulk, alg; kwargs...)
+    return initialize(tensors, bulk, alg; kwargs...)
 end
-function initenvironment(tensors, bulk, alg; kwargs...)
+function initialize(tensors, bulk, alg; kwargs...)
     return BoundaryState(tensors, bulk, alg; kwargs...)
 end
 
 @doc raw"""
-    calculate(b::BoundaryState)
+    contract(b::AbstractBoundaryState)
 
-Calculate the boundary tensors.
+Perform the contraction represented by algorithm state `b`.
 """
-calculate(state::BoundaryState) = calculate!(deepcopy(state))
-function calculate!(state::BoundaryState)
+function contract!(state::AbstractBoundaryState)
     alg = state.alg
     # Immutable parameters
     verbosity = alg.verbosity
@@ -132,10 +132,4 @@ function similarboundary(
     new_alg = similarboundary(Alg, state.alg)
     new_state = new_alg(bulk)
     return new_state
-end
-
-function truncmetric(boundary::AbstractBoundary, bulk::ContractableTensors)
-    sp = @. domain(bulk, 1) * domain(bulk, 1)
-    dst = similar.(bulk, sp, sp)
-    return truncmetric!(dst, boundary, bulk)
 end

@@ -1,62 +1,70 @@
-abstract type AbstractMPS{L<:AbstractLattice} end
-# const AbstractInfiniteMPS{L} = AbstractMPS{L<:AbstractUnitCell}
+# DONE
+abstract type AbstractMPS end
 
 @doc raw"""
     struct MPS
 """
-struct MPS{
-    L,AType<:AbstractOnLattice{L,<:TenAbs{2}},CType<:AbstractOnLattice{L,<:AbsTen{0,2}}
-} <: AbstractMPS{L}
+struct MPS{AType<:AbstractUnitCell{<:TenAbs{2}},CType<:AbstractUnitCell{<:AbsTen{0,2}}
+} <: AbstractMPS
     AL::AType
     C::CType
     AR::AType
     AC::AType
     function MPS(
-        AL::AType, C::CType, AR::AType, AC::AType; check=true
-    ) where {L,AType<:AbstractOnLattice{L},CType<:AbstractOnLattice{L}}
-        mps = new{L,AType,CType}(AL, C, AR, AC)
-        if check
-            validate(mps)
-        end
-        return mps
-    end
-    function MPS(
         AL::AType, C::CType, AR::AType, AC::AType
-    ) where {L<:SubLattice,AType<:AbstractOnLattice{L},CType<:AbstractOnLattice{L}}
-        mps = new{L,AType,CType}(AL, C, AR, AC)
-        return mps
+    ) where {AType<:AbstractUnitCell,CType<:AbstractUnitCell}
+        check_size_allequal(AL, C, AR, AC)
+        return new{AType,CType}(AL, C, AR, AC)
     end
 end
 
-const AbsLatY{Ny,Nx} = AbstractLattice{Nx,Ny}
-const SingleMPS = MPS{<:AbsLatY{1}}
+# FIELD GETTERS
 
-# const InfiniteMPS{L<:AbstractUnitCell} = MPS{L}
-# const iMPS = InfiniteMPS
-
-getleft(mps::AbstractMPS) = mps.AL
-getbond(mps::AbstractMPS) = mps.C
-getright(mps::AbstractMPS) = mps.AR
-getcentral(mps::AbstractMPS) = mps.AC
+getleft(mps::MPS) = mps.AL
+getbond(mps::MPS) = mps.C
+getright(mps::MPS) = mps.AR
+getcentral(mps::MPS) = mps.AC
 
 unpack(mps::AbstractMPS) = (getleft(mps), getbond(mps), getright(mps), getcentral(mps))
 
+# BASE
 
-Base.similar(mps::MPS) = MPS(similar.(unpack(mps))...; check=false)::MPS
+Base.size(mps::AbstractMPS) = size(getcentral(mps))
+Base.length(mps::AbstractMPS) = size(mps)[2]
+Base.similar(mps::M) where {M<:MPS} = MPS(similar.(unpack(mps))...; check=false)::M
 
-function isgauged(mps_single::AbstractMPS{<:AbstractLattice{Nx,1}}) where {Nx}
-    AL, C, AR, AC = unpack(mps_single)
-    for x in axes(AL, 1)
-        if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x - 1], AR[x]) ≈ AC[x])
-            return false
-        end
+function Base.getindex(mps::AbstractMPS, y::Int)
+    AL, C, AR, AC = unpack(mps)
+    @views begin
+        subAL = AL[:, y]
+        subC = C[:, y]
+        subAR = AR[:, y]
+        subAC = AC[:, y]
     end
-    return true
+    return MPS(subAL, subC, subAR, subAC)
 end
+
+function Base.iterate(mps::AbstractMPS, state=1)
+    if state > length(mps)
+        return nothing
+    else
+        return mps[state], state + 1
+    end
+end
+
+function Base.transpose(M::MPS)
+    return transpose.(unpack(M))
+end
+
+# GAUGING
+
 function isgauged(mps::AbstractMPS)
-    for mpsview in mps
-        if !isgauged(mpsview)
-            return false
+    for single_mps in mps
+        AL, C, AR, AC = unpack(single_mps)
+        for x in axes(AL, 1)
+            if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x-1], AR[x]) ≈ AC[x])
+                return false
+            end
         end
     end
     return true
@@ -69,19 +77,21 @@ function validate(mps::AbstractMPS)
     return mps
 end
 
-## Contructors
+# CONSTRUCTORS
+
 function MPS(f, T, lattice, D, χ; kwargs...)
     return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
 end
+
 function MPS(
-    f, T, D::AbstractOnLattice{L}, right_bonds::AbstractOnLattice{L}; kwargs...
-) where {L}
+    f, T, D::AbstractUnitCell, right_bonds::AbstractUnitCell; kwargs...
+)
     left_bonds = circshift(right_bonds, (1, 0))
     data_lat = @. TensorMap(f, T, D, right_bonds * adjoint(left_bonds))
     return MPS(data_lat; kwargs...)
 end
 
-function MPS(A::AbstractOnLattice; kwargs...)
+function MPS(A::AbstractUnitCell; kwargs...)
     bonds = @. getindex(domain(A), 1) # Canonical bond (right-hand) bond of mps tensor
 
     T = numbertype(A)
@@ -91,32 +101,20 @@ function MPS(A::AbstractOnLattice; kwargs...)
     AR = similar.(A)
 
     mixedgauge!(AL, C, AR, A; kwargs...)
-    return MPS(AL, C, AR)
+    return MPS(AL, C, AR; kwargs...)
 end
 
-function MPS(AL, C, AR)
-    AC = centraltensor(AL, C)
-    return MPS(AL, C, AR, AC)
-end
+MPS(AL, C, AR; kwargs...) = MPS(AL, C, AR, centraltensor(AL, C); kwargs...)
 
-function Base.getindex(mps::AbstractMPS, y::Int)
-    AL, C, AR, AC = unpack(mps)
-    subAL = lview(AL, :, y)
-    subC = lview(C, :, y)
-    subAR = lview(AR, :, y)
-    subAC = lview(AC, :, y)
-    return MPS(subAL, subC, subAR, subAC)
-end
-
-function Base.iterate(mps::AbstractMPS{<:AbstractLattice{Nx,Ny}}, state=1) where {Nx,Ny}
-    if state > Ny
-        return nothing
-    else
-        return mps[state], state + 1
+function MPS(AL, C, AR, AC; check=true)
+    mps = MPS(AL, C, AR, AC)
+    if check
+        validate(mps)
     end
+    return mps
 end
 
-Base.length(mps::AbstractMPS{<:AbstractLattice{Nx,Ny}}) where {Nx,Ny} = Ny
+# TENSOR OPERATIONS
 
 function _similar_ac(ac1::AbstractTensorMap{S,N}, ac2::AbstractTensorMap{S,M}) where {S,N,M}
     return _similar_ac(Val(N), ac1, ac2)
@@ -125,10 +123,10 @@ _similar_ac(::Val{0}, ac1, ac2) = similar(ac2)
 _similar_ac(::Val{N}, ac1, ac2) where {N} = similar(ac1)
 
 centraltensor(A1, A2) = centraltensor!(_similar_ac.(A1, A2), A1, A2)
-function centraltensor!(AC, AL::AbstractOnLattice{L,<:AbsTen{N,2}}, C) where {L,N}
+function centraltensor!(AC, AL::AbstractUnitCell{<:TenAbs{2}}, C)
     return mulbond!.(AC, AL, C)
 end
-function centraltensor!(AC, C::AbstractOnLattice{L,<:AbsTen{0,2}}, AR) where {L}
+function centraltensor!(AC, C::AbstractUnitCell{<:AbsTen{0,2}}, AR)
     return mulbond!.(AC, circshift(C, (1, 0)), AR)
 end
 
@@ -158,13 +156,11 @@ function mulbond!(
     return @tensoropt AC[p1 p2; xr xl] = A[p1 p2; x_in xl] * C[xr x_in]
 end
 
-function Base.transpose(M::MPS)
-    return transpose.(unpack(M))
-end
+# MAYBE DEPREC
 
 westbond(mps::MPS) = westbond.(mps.AC)
 
-# norm(A::AbstractMPS) = tr(c * c')
+# DEPREC
 
 function get_truncmetric_tensors(mps::MPS, bond::Bond)
     bond_1 = bond
@@ -174,10 +170,10 @@ function get_truncmetric_tensors(mps::MPS, bond::Bond)
     AR = getright(mps)
 
     ac_u = AC[left(bond_1)]
-    ac_d = AC[left(bond_1) + CartesianIndex(0, 1)]
+    ac_d = AC[left(bond_1)+CartesianIndex(0, 1)]
 
     ar_u = AR[right(bond_1)]
-    ar_d = AR[right(bond_1) + CartesianIndex(0, 1)]
+    ar_d = AR[right(bond_1)+CartesianIndex(0, 1)]
 
     return ac_u, ac_d, ar_u, ar_d
 end
