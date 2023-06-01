@@ -1,6 +1,3 @@
-using CircularArrays
-using LinearAlgebra
-
 abstract type AbstractUnitCellGeometry end
 abstract type AbstractUnitCell{ElType,G<:AbstractUnitCellGeometry} <: AbstractMatrix{ElType} end
 
@@ -85,4 +82,26 @@ UnitCell{G}(data::AbstractMatrix) where {G} = UnitCell{G}(CircularArray(data))
 
 function LinearAlgebra.transpose(uc::AbstractUnitCell)
     return UnitCell(CircularArray(transpose(getdata(uc).data)))
+end
+
+## VIEW
+
+@inline function Base.view(uc::AbstractUnitCell, i1, i2, inds...) 
+    new_inds = (int_to_range(i1, i2)..., inds...)
+    return UnitCell(view(getdata(uc).data,new_inds...))
+end
+
+_unitrange(i::Int) = UnitRange(i,i)
+_unitrange(x) = x
+
+int_to_range(i1, i2) = (_unitrange(i1), _unitrange(i2))
+
+## UTILS
+
+size_allequal(ucs...) = allequal(size.(ucs))
+function check_size_allequal(ucs...)
+    if !size_allequal(ucs)
+        throw(DimensionMismatch("Unit cells provided do not have same dimensionality"))
+    end
+    return nothing
 end
