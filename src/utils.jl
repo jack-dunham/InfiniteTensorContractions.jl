@@ -122,3 +122,21 @@ function _rightorth(t::AbsTen{N,2}) where {N}
     l_out = permute(L, (), (2, 1))
     return l_out, t_out
 end
+
+function dimtospace(SType::Type{<:IndexSpace}, D::Int)
+    S = oneunit(SType)
+    if D == 1
+        return S::SType
+    else
+        return ⊕(S^D...)::SType
+    end
+end
+
+
+
+
+
+
+
+
+
