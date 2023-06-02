@@ -1,15 +1,17 @@
 abstract type AbstractUnitCellGeometry end
-abstract type AbstractUnitCell{ElType,G<:AbstractUnitCellGeometry} <: AbstractMatrix{ElType} end
+abstract type AbstractUnitCell{G<:AbstractUnitCellGeometry,ElType} <: AbstractMatrix{ElType} end
 
 struct Square <: AbstractUnitCellGeometry end
 
-struct UnitCell{ElType,G,A<:AbstractMatrix{ElType}} <: AbstractUnitCell{ElType,G}
+struct UnitCell{G<:AbstractUnitCellGeometry,ElType,A} <: AbstractUnitCell{G,ElType}
     data::CircularArray{ElType,2,A}
-    UnitCell{G}(data::CircularArray{T,2,A}) where {T,G,A} = new{T,G,A}(data)
+    UnitCell{G,T,A}(data::CircularArray{T,2,A}) where {G,T,A} = new{G,T,A}(data)
 end
 
-
 @inline getdata(uc::UnitCell) = uc.data
+
+Base.convert(U::Type{<:AbstractUnitCell}, data::AbstractMatrix) = U(data)
+Base.convert(U::Type{<:AbstractUnitCell}, uc::AbstractUnitCell) = U(getdata(uc))
 
 ## ABSTRACT ARRAY
 
@@ -19,38 +21,41 @@ end
 
 ## SIMILAR
 
-@inline Base.similar(uc::UnitCell{T,G}) where {T,G} = UnitCell{G}(similar(getdata(uc)))
-@inline function Base.similar(uc::UnitCell{T,G}, ::Type{S}) where {G,S,T}
+@inline Base.similar(uc::UnitCell{G,T}) where {G,T} = UnitCell{G}(similar(getdata(uc)))
+@inline function Base.similar(uc::UnitCell{G,T}, ::Type{S}) where {G,S,T}
     return UnitCell{G}(similar(getdata(uc), S))
 end
-@inline function Base.similar(uc::UnitCell{T,G}, dims::Dims) where {T,G}
+@inline function Base.similar(uc::UnitCell{G,T}, dims::Dims) where {T,G}
     return UnitCell{G}(similar(getdata(uc), dims))
 end
-@inline function Base.similar(uc::UnitCell{T,G}, ::Type{S}, dims::Dims) where {T,S,G}
+@inline function Base.similar(uc::UnitCell{G,T}, ::Type{S}, dims::Dims) where {T,S,G}
     return UnitCell{G}(similar(getdata(uc), S, dims))
 end
 
-## BROADCASTING 
+## BROADCASTING
+abstract type AbstractUnitCellStyle{G,T} <: Broadcast.AbstractArrayStyle{2} end
+struct UnitCellStyle{G,T,A} <: AbstractUnitCellStyle{G,T} end
 
-@inline function Base.BroadcastStyle(::Type{<:UnitCell{T,G,A}}) where {T,G,A}
-    return Broadcast.ArrayStyle{UnitCell{T,G,A}}()
+(T::Type{<:AbstractUnitCellStyle})(::Val{2}) = T()
+(T::Type{<:AbstractUnitCellStyle})(::Val{N}) where {N} = Broadcast.DefaultArrayStyle{N}()
+
+# @inline function Base.BroadcastStyle(::Type{<:UnitCell{T,G,A}}) where {T,G,A}
+#     return Broadcast.ArrayStyle{UnitCell{T,G,A}}()
+# end
+
+@inline function Base.BroadcastStyle(::Type{UnitCell{G,ElType,A}}) where {G,ElType,A}
+    return UnitCellStyle{G, ElType, A}()
 end
 
 @inline function Base.BroadcastStyle(
-    UC::Broadcast.ArrayStyle{<:UnitCell}, ::Broadcast.ArrayStyle{<:CircularArray}
-)
-    return UC
-end
-@inline function Base.BroadcastStyle(
-    UC::Broadcast.ArrayStyle{<:UnitCell{T,G,<:Transpose{T}}},
-    ::Broadcast.ArrayStyle{<:UnitCell},
-) where {T,G}
-    return UC
+    U::UnitCellStyle, ::Broadcast.ArrayStyle{<:CircularArray}
+) 
+    return U
 end
 
 @inline function Base.similar(
-    bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{UnitCell{T,G,A}}}, ::Type{ElType}
-) where {T,G,A,ElType}
+    bc::Broadcast.Broadcasted{UnitCellStyle{G,T,A}}, ::Type{ElType}
+) where {G,T,A,ElType}
     return UnitCell{G}(
         similar(
             convert(Broadcast.Broadcasted{typeof(Broadcast.BroadcastStyle(A))}, bc), ElType
@@ -58,25 +63,13 @@ end
     )
 end
 
-@inline function Base.similar(
-    bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{UnitCell{T,G,Transpose{T,A}}}},
-    ::Type{ElType},
-) where {T,G,A,ElType}
-    arr = permutedims(
-        similar(
-            convert(Broadcast.Broadcasted{typeof(Broadcast.BroadcastStyle(A))}, bc), ElType
-        ),
-    )
-    return UnitCell{G}(transpose(arr))
-end
-    
 ## CONSTRUCTORS
 
-# Default to sqaure lattice
+# Make circular
 UnitCell(data) = UnitCell{Square}(data)
+UnitCell{G}(data::A) where {G,T,A<:AbstractMatrix{T}} = UnitCell{G,T,A}(data)
+UnitCell{G,T,A}(data::A) where {G,T,A<:AbstractMatrix{T}} = UnitCell{G,T,A}(CircularArray(data))
 # Convert normal matrices into `CircularArray`
-UnitCell{G}(data::AbstractMatrix) where {G} = UnitCell{G}(CircularArray(data))
-
 
 ## LINEAR ALGEBRA
 
@@ -86,12 +79,12 @@ end
 
 ## VIEW
 
-@inline function Base.view(uc::AbstractUnitCell, i1, i2, inds...) 
+@inline function Base.view(uc::AbstractUnitCell, i1, i2, inds...)
     new_inds = (int_to_range(i1, i2)..., inds...)
-    return UnitCell(view(getdata(uc).data,new_inds...))
+    return UnitCell(view(getdata(uc).data, new_inds...))
 end
 
-_unitrange(i::Int) = UnitRange(i,i)
+_unitrange(i::Int) = UnitRange(i, i)
 _unitrange(x) = x
 
 int_to_range(i1, i2) = (_unitrange(i1), _unitrange(i2))
@@ -108,9 +101,6 @@ end
 
 ## TENSORS
 
-TensorKit.spacetype(::AbstractUnitCell{<:AbstractTensorMap{S}}) where {S} = S
-numbertype(::AbstractUnitCell{T}) where {T} = eltype(T)
-
-
-
+TensorKit.spacetype(::AbstractUnitCell{G,<:AbstractTensorMap{S}}) where {G,S} = S
+numbertype(::AbstractUnitCell{G,T}) where {G,T} = eltype(T)
 
