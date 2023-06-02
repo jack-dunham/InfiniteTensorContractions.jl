@@ -83,10 +83,10 @@ function updatecorners!(corners::Corners, corners_p::Corners)
     return corners
 end
 
-struct CornerMethodTensors{L,CType,TType,SVDAlg<:OrthogonalFactorizationAlgorithm} <:
+struct CornerMethodTensors{CType,TType,SVDAlg<:OrthogonalFactorizationAlgorithm} <:
        AbstractCornerBoundary
-    corners::Corners{L,CType}
-    edges::Edges{L,TType}
+    corners::Corners{CType}
+    edges::Edges{TType}
     # function CTMRG(
     #     corners::Corners{L,CType},
     #     edges::Edges{L,TType},
