@@ -1,5 +1,5 @@
 abstract type AbstractContractionAlgorithm end
-abstract type AbstractContractionState{<:AbstractContractionAlgorithm} end
+abstract type AbstractContractionState{Alg<:AbstractContractionAlgorithm} end
 abstract type AbstractContractionTensors end
 
 # Return AlgorithmState 

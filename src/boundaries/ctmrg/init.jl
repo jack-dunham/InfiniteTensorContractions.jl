@@ -28,7 +28,7 @@ function initpermuted(ctmrg::CornerMethodTensors)
 end
 
 function initprojectors(bulk, chi::IndexSpace)
-    _, bot_bonds, _, top_bonds = _bondspaces(bulk)
+    _, bot_bonds, _, top_bonds = bondspace(bulk)
 
     T = numbertype(bulk)
 
