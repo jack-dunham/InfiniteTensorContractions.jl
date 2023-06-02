@@ -1,6 +1,6 @@
 abstract type AbstractBoundaryTensors <: AbstractContractionTensors end
 abstract type AbstractBoundaryAlgorithm <: AbstractContractionAlgorithm end
-abstract type AbstractBoundaryState{B} <: AbstractContractionState{B<:AbstractBoundaryAlgorithm}
+abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} <: AbstractContractionState{B} end
 
 
 function similarboundary(
@@ -11,7 +11,7 @@ function similarboundary(
         verbosity=alg.verbosity,
         maxiter=alg.maxiter,
         tol=alg.tol,
-        kwargs...,
+        kwargs...
     )
 end
 
@@ -31,12 +31,12 @@ can be one of `VUMPS`, `CTMRG`, `FPCM`, `FPCM_CTMRG`, or a user-defined algorith
 """
 struct BoundaryState{
     Alg<:AbstractBoundaryAlgorithm,
-    BuType<:AbstractUnitCell,
-    BoType<:AbstractBoundaryTenors,
+    BuType<:AbstractContractableTensors,
+    BoType<:AbstractBoundaryTensors,
 } <: AbstractBoundaryState{Alg}
     tensors::BoType
     initial_tensors::BoType
-    bulk::BulkType
+    bulk::BuType
     alg::Alg
     info::ConvergenceInfo
     function BoundaryState(
@@ -46,15 +46,15 @@ struct BoundaryState{
         alg::Alg,
         info::ConvergenceInfo,
     ) where {
-        BoundaryType<:AbstractBoundary,
-        BulkType<:AbstractUnitCell,
+        BoType<:AbstractBoundaryTensors,
+        BuType<:AbstractContractableTensors,
         Alg<:AbstractBoundaryAlgorithm,
     }
         btype = contraction_boundary_type(tensors)
         if !(btype == typeof(alg))
             throw(ArgumentError("Incompatible type of boundary for algorithm provided"))
         else
-            return new{Alg,BulkType,BoundaryType}(tensors, initial_tensors, bulk, alg, info)
+            return new{Alg,BuType,BoType}(tensors, initial_tensors, bulk, alg, info)
         end
     end
 end
@@ -127,7 +127,7 @@ end
 
 function similarboundary(
     ::Type{Alg}, state::AbstractBoundaryState
-) where {Alg<:AbstractBoundary}
+) where {Alg<:AbstractBoundaryTensors}
     bulk = state.bulk
     new_alg = similarboundary(Alg, state.alg)
     new_state = new_alg(bulk)
