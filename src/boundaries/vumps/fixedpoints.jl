@@ -16,11 +16,13 @@ FixedPoints(f, mps::MPS, bulk) = initfixedpoints(f, mps, bulk)
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
 # DEPREC
+#=
 function get_truncmetric_tensors(fp::FixedPoints, bond::Bond)
     l = left(bond)
     r = right(bond)
     return fp.left[l], fp.right[r]
 end
+=#
 
 function initfixedpoints(f, mps::MPS, bulk)
     mps_tensor = getcentral(mps)
@@ -106,8 +108,8 @@ end
 
 function fixedpoints!(
     fpoints::FixedPoints,
-    tm_left::TransferMatrices,
-    tm_right::TransferMatrices,
+    tm_left::AbstractTransferMatrices,
+    tm_right::AbstractTransferMatrices,
     C::AbstractUnitCell,
 )
     FL = fpoints.left

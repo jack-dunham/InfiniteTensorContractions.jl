@@ -8,7 +8,7 @@ function Base.eltype(t::TransferMatrix)
     return promote_type(eltype(t.above), eltype(t.middle), eltype(t.below))
 end
 
-const AbstractTransferMatrices{T} = AbstractUnitCell{T<:TransferMatrix}
+const AbstractTransferMatrices{T<:TransferMatrix} = AbstractUnitCell{T}
 
 # Regular is for getting correct space of resulting F, _ function is for getting 
 # correct space compatible F

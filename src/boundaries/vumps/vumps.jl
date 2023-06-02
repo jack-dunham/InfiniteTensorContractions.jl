@@ -7,7 +7,7 @@ end
 
 struct VUMPSTensors{AType<:AbstractUnitCell,CType<:AbstractUnitCell,FType<:AbstractUnitCell} <: AbstractBoundaryTensors
     mps::MPS{AType,CType}
-    fixedpoints::FixedPoints{FPType}
+    fixedpoints::FixedPoints{FType}
 end
 
 contraction_boundary_type(::VUMPSTensors) = VUMPS

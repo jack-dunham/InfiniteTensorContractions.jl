@@ -176,7 +176,7 @@ end
 function gauge!(
     A::AbstractUnitCell{<:AbstractTensorMap{S}},
     U::AbstractUnitCell{<:AbstractTensorMap{S,0,2}},
-) where {L,S}
+) where {S}
     _A = centraltensor(A, U)
     centraltensor!(A, adjoint.(U), _A)
     return A

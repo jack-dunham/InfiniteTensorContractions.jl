@@ -161,6 +161,7 @@ end
 westbond(mps::MPS) = westbond.(mps.AC)
 
 # DEPREC
+#=
 
 function get_truncmetric_tensors(mps::MPS, bond::Bond)
     bond_1 = bond
@@ -177,3 +178,4 @@ function get_truncmetric_tensors(mps::MPS, bond::Bond)
 
     return ac_u, ac_d, ar_u, ar_d
 end
+=#
