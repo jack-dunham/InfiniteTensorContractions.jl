@@ -10,9 +10,9 @@ function nswap(k::Int, n::Int, p::NTuple{N}) where {N}
     if k == n
         return p
     elseif n > k
-        return (p[1:(k - 1)]..., p[(k + 1):n]..., p[k]..., p[(n + 1):N]...)::typeof(p)
+        return (p[1:(k-1)]..., p[(k+1):n]..., p[k]..., p[(n+1):N]...)::typeof(p)
     else
-        return (p[1:(n - 1)]..., p[k], p[n:(k - 1)]..., p[(k + 1):N]...)::typeof(p)
+        return (p[1:(n-1)]..., p[k], p[n:(k-1)]..., p[(k+1):N]...)::typeof(p)
     end
 end
 
@@ -70,30 +70,22 @@ function slice(ind::NTuple{N,Int}, sp::ProductSpace{S,N₁}) where {N,N₁,S<:In
     return *(one(S), one(S), (sp[i] for i in ind)...)
 end
 
-westbond(t::AbstractTensorMap) = codomain(t)[1]
-southbond(t::AbstractTensorMap) = codomain(t)[2]
-downbond(t::AbstractTensorMap) = codomain(t)[3]
-
-eastbond(t::AbstractTensorMap) = domain(t)[1]
-northbond(t::AbstractTensorMap) = domain(t)[2]
-upbond(t::AbstractTensorMap) = domain(t)[3]
-
 # Alt permute() 
 function _permute(t::AbstractTensorMap{<:IndexSpace,N,M}, p::Tuple) where {N,M}
     if !(length(p) == N + M)
         throw(DimensionMismatch())
     else
-        return permute(t, p[1:N], p[(N + 1):(N + M)])
+        return permute(t, p[1:N], p[(N+1):(N+M)])
     end
 end
 
 # Swap codomain and domain (Base.transpose reverses indices)
 function _transpose(tsrc::AbsTen{N,M}) where {N,M}
-    return permute(tsrc, Tuple((N + 1):(N + M))::NTuple{M::Int}, Tuple(1:N)::NTuple{N,Int})
+    return permute(tsrc, Tuple((N+1):(N+M))::NTuple{M::Int}, Tuple(1:N)::NTuple{N,Int})
 end
 
 function permutecod(t::AbsTen{N,M}, p::NTuple{N,Int}) where {N,M}
-    return permute(t, p, Tuple((N + 1):(M + N))::NTuple{M,Int})
+    return permute(t, p, Tuple((N+1):(M+N))::NTuple{M,Int})
 end
 
 function permutedom(t::AbsTen{N,M}, p::NTuple{M,Int}) where {N,M}
@@ -101,7 +93,7 @@ function permutedom(t::AbsTen{N,M}, p::NTuple{M,Int}) where {N,M}
     return permute(t, Tuple(1:N)::NTuple{N,Int}, p_dom)
 end
 function permutecod!(tdst, tsrc::AbsTen{N,M}, p::NTuple{N,Int}) where {N,M}
-    return permute!(tdst, tsrc, p, Tuple((N + 1):(M + N))::NTuple{M,Int})
+    return permute!(tdst, tsrc, p, Tuple((N+1):(M+N))::NTuple{M,Int})
 end
 
 function permutedom!(tdst, tsrc::AbsTen{N,M}, p::NTuple{M,Int}) where {N,M}
@@ -118,7 +110,7 @@ end
 
 function _rightorth(t::AbsTen{N,2}) where {N}
     L, Q = rightorth(t, (N + 2,), tuple(1:N..., N + 1)::NTuple{N + 1,Int})
-    t_out = permute(Q, Tuple(2:(N + 1))::NTuple{N,Int}, (N + 2, 1))
+    t_out = permute(Q, Tuple(2:(N+1))::NTuple{N,Int}, (N + 2, 1))
     l_out = permute(L, (), (2, 1))
     return l_out, t_out
 end
@@ -132,10 +124,20 @@ function dimtospace(SType::Type{<:IndexSpace}, D::Int)
     end
 end
 
+function tensormap(arr::AbstractArray, p1::NTuple{N₁,<:Integer}, p2::NTuple{N₂,<:Integer}) where {N₁,N₂}
 
+    arr_p = permutedims(arr, (p1..., p2...))
+    space = map(x -> ℂ^2, size(arr_p))
+    
+    nil = one(ComplexSpace)
 
+    tmult = x -> splat(*)((nil,nil,x...))
 
+    cod = tmult(space[1:N₁])
+    dom = tmult(space[N₁+1:N₁+N₂])
 
+    return TensorMap(arr_p, cod, dom)
+end
 
 
 
