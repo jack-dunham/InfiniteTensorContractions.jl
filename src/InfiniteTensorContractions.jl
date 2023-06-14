@@ -5,6 +5,8 @@ using LinearAlgebra
 using TensorKit
 using KrylovKit
 
+import Base: @kwdef
+
 export Square
 export UnitCell, ContractableTensors
 
