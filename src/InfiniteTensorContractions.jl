@@ -4,13 +4,12 @@ using CircularArrays
 using LinearAlgebra
 using TensorKit
 using KrylovKit
-using Parameters
 
 export Square
 export UnitCell, ContractableTensors
 
 export VUMPS, CTMRG
-export initialise#, initialize
+export initialize, calculate!, calculate, contract
 
 # No deps
 include("convergenceinfo.jl")
