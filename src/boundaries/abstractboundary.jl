@@ -1,7 +1,7 @@
 abstract type AbstractBoundaryTensors <: AbstractContractionTensors end
 abstract type AbstractBoundaryAlgorithm <: AbstractContractionAlgorithm end
-abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} <: AbstractContractionState{B} end
-
+abstract type AbstractBoundaryState{B<:AbstractBoundaryAlgorithm} <:
+              AbstractContractionState{B} end
 
 function similarboundary(
     ::Type{Alg}, alg::AbstractBoundaryAlgorithm; kwargs...
@@ -11,23 +11,23 @@ function similarboundary(
         verbosity=alg.verbosity,
         maxiter=alg.maxiter,
         tol=alg.tol,
-        kwargs...
+        kwargs...,
     )
 end
 
-@doc raw"""
-    BoundaryState{B<:AbstractBoundary} <: AbstractBoundaryState{B}
+"""
+    BoundaryState{Alg, BuType, BoType} <: AbstractBoundaryState{B}
 
-A struct representing the state of boundary algorithm of type `B`. The paramater `B`
-can be one of `VUMPS`, `CTMRG`, `FPCM`, `FPCM_CTMRG`, or a user-defined algorithm. 
+A struct representing the state of a boundary algorithm of type `Alg` used to contract a network of 
+type `BuType` using boundary tensors of type `BoType`. Note, avoid constructing this object directly,
+instead use function `initialize`.
 
 # Fields
-- `data::B`: the tensors that compose the boundary, in addition to algorithm specific 
-    data
-- `mpo::InfMPO`: the matrix product operator whos boundary tensors are stored in `data`
-- `initial::Alg`: the tensors used as the starting point of the algorithm
+- `tensors::BoType <: AbstractBoundaryTensors`: the tensors that compose the boundary
+- `network::BuType <: AbstractNetwork`: the network of tensors to be contracted
+- `alg::Alg`: the contraction algorithm to be used
 - `info::ConvergenceInfo`: information about the covergence progress of the algorithm
-- `param::BoundaryParameters`: the paramaters used in the algorithm
+- `outfile::String`: file to write data to
 """
 struct BoundaryState{
     Alg<:AbstractBoundaryAlgorithm,
@@ -35,88 +35,99 @@ struct BoundaryState{
     BoType<:AbstractBoundaryTensors,
 } <: AbstractBoundaryState{Alg}
     tensors::BoType
-    initial_tensors::BoType
     bulk::BuType
     alg::Alg
     info::ConvergenceInfo
+    outfile::String
+    prestep::Function
+    poststep::Function
+    initial_tensors::BoType
     function BoundaryState(
         tensors::BoType,
-        initial_tensors::BoType,
         bulk::BuType,
         alg::Alg,
         info::ConvergenceInfo,
-    ) where {
-        BoType<:AbstractBoundaryTensors,
-        BuType<:AbstractContractableTensors,
-        Alg<:AbstractBoundaryAlgorithm,
-    }
-        btype = contraction_boundary_type(tensors)
-        if !(btype == typeof(alg))
-            throw(ArgumentError("Incompatible type of boundary for algorithm provided"))
-        else
-            return new{Alg,BuType,BoType}(tensors, initial_tensors, bulk, alg, info)
-        end
+        outfile::String,
+        prestep::Function,
+        poststep::Function,
+        initial_tensors::BoType,
+    ) where {BoType,BuType,Alg}
+        boundary_verify(tensors, alg)
+        return new{Alg,BuType,BoType}(
+            tensors, bulk, alg, info, outfile, prestep, poststep, initial_tensors
+        )
+    end
+    function BoundaryState(
+        tensors::BoType,
+        bulk::BuType,
+        alg::Alg,
+        info::ConvergenceInfo,
+        outfile::String,
+        prestep::Function,
+        poststep::Function,
+    ) where {BoType,BuType,Alg}
+        boundary_verify(tensors, alg)
+        return new{Alg,BuType,BoType}(tensors, bulk, alg, info, outfile, prestep, poststep)
     end
 end
 
-function BoundaryState(tensors, bulk, alg; info=ConvergenceInfo(), store_initial=false)
+function boundary_verify(tensors, alg)
+    btype = contraction_boundary_type(tensors)
+    if !(btype == typeof(alg))
+        throw(ArgumentError("Incompatible type of boundary for algorithm provided"))
+    end
+    return nothing
+end
+
+function initialize(
+    bulk,
+    alg,
+    initial_tensors=inittensors(rand, bulk, alg);
+    store_initial=true,
+    outfile="",
+    prestep=identity,
+    poststep=identity,
+)
+    info = ConvergenceInfo()
     if store_initial
-        initial = deepcopy(tensors)
+        initial_copy = deepcopy(initial_tensors)
+        return BoundaryState(
+            initial_tensors, bulk, alg, info, outfile, prestep, poststep, initial_copy
+        )
     else
-        initial = similar(tensors)
+        return BoundaryState(initial_tensors, bulk, alg, info, outfile, prestep, poststep)
     end
-    return BoundaryState(tensors, initial, bulk, alg, info)
 end
 
-@doc raw"""
-    inittensors(f, T, alg::BoundaryAlgorithm)
+function run!(state::AbstractBoundaryState)
+    prestep = state.prestep
+    poststep = state.poststep
 
-Initialise the boundary tensors compatible with lattice `T` for use in boundary algorithm
-`alg`.
-"""
-function inittensors(f, bulk, alg::AbstractBoundaryAlgorithm) end
-
-# @doc raw"""
-# Initilise a new `alg` boundary algorithm state for contracting the infinite lattice
-# generated by `T` using boundary tensors generated from the function `f`. The callable 
-# `f` should be a callable compatible with the `TensorMap` object. Alternatively, initialise 
-# a new algorithm state with initial boundary given by `B`.
-# """
-# function initstate(f, T, alg::BoundaryAlgorithm)
-#     return boundary = inittensors(f, T, alg)
-# end
-
-function initialize(bulk, alg::AbstractBoundaryAlgorithm; kwargs...)
-    tensors = inittensors(detrace(bulk), alg; kwargs...)
-    return initialize(tensors, bulk, alg; kwargs...)
-end
-function initialize(tensors, bulk, alg; kwargs...)
-    return BoundaryState(tensors, bulk, alg; kwargs...)
-end
-
-@doc raw"""
-    contract(b::AbstractBoundaryState)
-
-Perform the contraction represented by algorithm state `b`.
-"""
-function contract!(state::AbstractBoundaryState)
     alg = state.alg
-    # Immutable parameters
-    verbosity = alg.verbosity
+    info = state.info
+
+    alg.verbose && @info "Running algorithm $alg"
+
+    # Immutable paramaters
     maxiter = alg.maxiter
     tol = alg.tol
-    bonddim = alg.bonddim
-    # Mutating parameters
-    info = state.info
-    error = info.error
-    iterations = info.iterations
 
-    # Remove any wrappers, converting tensors to appropraite forms.
+    # Remove any wrappers, converting tensors to appropriate forms.
     bulk = detrace(state.bulk)
 
-    info.error, info.iterations = calculate!(
-        state.tensors, bulk; bonddim=bonddim, verbosity=verbosity, tol=tol, maxiter=maxiter
-    )
+    args = start(state)
+
+    while info.iterations < maxiter && info.error ≥ tol
+        prestep(state, args...)
+
+        info.error = step!(state.tensors, bulk, alg, args...)
+
+        info.iterations += 1
+
+        alg.verbose && @info "Error ≈ $(info.error) \t after $(info.iterations) iterations"
+
+        poststep(state, args...)
+    end
 
     info.error > tol ? info.converged = false : info.converged = true
 
@@ -125,11 +136,28 @@ function contract!(state::AbstractBoundaryState)
     return state
 end
 
+Base.identity(x::AbstractBoundaryState, args...; kwargs...) = x
+
+detrace(x) = x
+
 function similarboundary(
     ::Type{Alg}, state::AbstractBoundaryState
 ) where {Alg<:AbstractBoundaryTensors}
     bulk = state.bulk
     new_alg = similarboundary(Alg, state.alg)
-    new_state = new_alg(bulk)
+    new_state = initialize(bulk, new_alg)
     return new_state
+end
+
+function boundaryerror!(S_old::AbstractMatrix, C_new::AbstractMatrix)
+    S_new = boundaryerror.(C_new)
+    err = @. norm(S_old - S_new)
+    S_old .= S_new
+    return err
+end
+
+function boundaryerror(c_new::AbstractTensorMap)
+    _, s_new, _ = tsvd(c_new, (1,), (2,))
+    normalize!(s_new)
+    return s_new
 end

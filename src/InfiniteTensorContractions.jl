@@ -38,4 +38,8 @@ include("boundaries/ctmrg/init.jl")
 include("boundaries/ctmrg/tensormacros.jl")
 #
 
+function __init__()
+    ENV["ITC_ALWAYS_FORCE"] = false
+end
+
 end # module

@@ -1,12 +1,12 @@
 # Solves AL * C = C * A (= AC)
 function leftgauge!(
-    AL::AbstractUnitCell{<:AbstractTensorMap{S,N,2}},
-    L::AbstractUnitCell{<:AbstractTensorMap{S,0,2}},
-    A::AbstractUnitCell{<:AbstractTensorMap{S,N,2}};
+    AL::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}},
+    L::AbstractUnitCell{G,<:AbstractTensorMap{S,0,2}},
+    A::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}};
     tol=1e-12,
     maxiter=100,
-    verbose=false
-) where {S,N}
+    verbose=false,
+) where {G,S,N}
     numsites = length(A)
     r = 1:numsites
 
@@ -33,7 +33,7 @@ function leftgauge!(
 
     Lp = permute(Ls[1], (1,), (2,))
 
-    # println("Hermiticity: ", norm(Lp - Lp'))
+    @debug "MPS fixed point info:" hermiticity = norm(Lp - Lp')
 
     Lp = 1 / 2 * (Lp + Lp')
 
@@ -45,10 +45,10 @@ function leftgauge!(
     L[end] = permute(V * sqrt(D) * V', (), (1, 2))
 
     for x in r
-        Lold = L[x-1]
+        Lold = L[x - 1]
 
         # AL[x], L[x] = leftorth!(mulbond!(AL[x], L[x - 1], A[x]))
-        AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x-1]), A[x])
+        AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x - 1]), A[x])
         λ[x] = norm(L[x])
         rmul!(L[x], 1 / λ[x])
 
@@ -60,7 +60,7 @@ function leftgauge!(
     while numiter < maxiter && max(ϵ...) > tol
         for x in r
             Lold = L[x]
-            AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x-1]), A[x])
+            AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x - 1]), A[x])
 
             λ[x] = norm(L[x])
             rmul!(L[x], 1 / λ[x])
@@ -78,7 +78,7 @@ function rightgauge!(
     AR::AbstractUnitCell{U,<:AbstractTensorMap{S,N,2}},
     R::AbstractUnitCell{U,<:AbstractTensorMap{S,0,2}},
     A::AbstractUnitCell{U,<:AbstractTensorMap{S,N,2}};
-    kwargs...
+    kwargs...,
 ) where {U,S,N}
     # Permute left and right virtual bonds bonds
     AL = permutedom.(AR, Ref((2, 1)))
@@ -110,13 +110,9 @@ function mixedgauge!(AL, C, AR, A; verbose=false, kwargs...)
     for y in axes(A, 2)
         verbose && @info "Gauging right..."
         @views begin
-            rightgauge!(
-                AR[:, y], C[:, y], A[:, y]; verbose=verbose, kwargs...
-            )
+            rightgauge!(AR[:, y], C[:, y], A[:, y]; verbose=verbose, kwargs...)
             verbose && @info "Gauging left..."
-            leftgauge!(
-                AL[:, y], C[:, y], AR[:, y]; verbose=verbose, kwargs...
-            )
+            leftgauge!(AL[:, y], C[:, y], AR[:, y]; verbose=verbose, kwargs...)
         end
     end
     # currently not working 
@@ -141,10 +137,10 @@ end
 
 # Diagonalise the bond matrices using the singular value decomposition.
 function diagonalise!(
-    AL::AbstractUnitCell{<:AbstractTensorMap{S}},
-    C::AbstractUnitCell{<:AbstractTensorMap{S}},
-    AR::AbstractUnitCell{<:AbstractTensorMap{S}},
-) where {S}
+    AL::AbstractUnitCell{G,<:AbstractTensorMap{S}},
+    C::AbstractUnitCell{G,<:AbstractTensorMap{S}},
+    AR::AbstractUnitCell{G,<:AbstractTensorMap{S}},
+) where {G,S}
     U = similar(C)
     V = similar(C)
 
@@ -174,9 +170,9 @@ end
 
 # Vectorised form of a gauge transformation. That is, A[x] <- U'[x-1]*A[x]*U[x]
 function gauge!(
-    A::AbstractUnitCell{<:AbstractTensorMap{S}},
-    U::AbstractUnitCell{<:AbstractTensorMap{S,0,2}},
-) where {S}
+    A::AbstractUnitCell{G,<:AbstractTensorMap{S}},
+    U::AbstractUnitCell{G,<:AbstractTensorMap{S,0,2}},
+) where {G,S}
     _A = centraltensor(A, U)
     centraltensor!(A, adjoint.(U), _A)
     return A

@@ -2,7 +2,7 @@
 abstract type AbstractFixedPoints end
 
 # Fixed points of a transfer matrix
-struct FixedPoints{A<:AbstractUnitCell{<:TenAbs{2}}} <: AbstractFixedPoints
+struct FixedPoints{A<:AbUnCe{<:TenAbs{2}}} <: AbstractFixedPoints
     left::A
     right::A
     function FixedPoints(left::A, right::A) where {A}

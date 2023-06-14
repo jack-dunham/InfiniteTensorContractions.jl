@@ -2,6 +2,7 @@
 const AbsTen{N₁,N₂,S} = AbstractTensorMap{S,N₁,N₂}
 const TenAbs{N₂,N₁,S} = AbstractTensorMap{S,N₁,N₂}
 
+
 const _DIR_TO_DOMIND = (east=1, south=2, west=3, north=4)
 
 # Output the permutation of that results in the k'th element of p moved to the
@@ -138,6 +139,26 @@ function tensormap(arr::AbstractArray, p1::NTuple{N₁,<:Integer}, p2::NTuple{N�
 
     return TensorMap(arr_p, cod, dom)
 end
+
+deepcopy!(dst::AbstractArray, src::AbstractArray) = copy!(dst, src)
+
+function isinitialised(arr::AbstractArray)
+    local rv
+    try 
+        rv = all(isinitialised.(arr, LinearIndices(arr)))
+    catch e
+        if isa(e, UndefRefError)
+            rv = false
+        else
+            throw(e)
+        end
+    end
+    return rv
+end
+function isinitialised(arr::AbstractTensorMap, i)
+    return isassigned(arr.data, i)
+end
+isinitialised(arr, i) = isassigned(arr, i)
 
 
 

@@ -1,11 +1,39 @@
-@with_kw struct VUMPS <: AbstractBoundaryAlgorithm
+"""
+    VUMPS <: AbstractBoundaryAlgorithm
+
+Stores the parameters for the variational uniform matrix product state (VUMPS)  boundary algorithm. 
+
+# Fields
+- `bonddim::Int`: the bond dimension of the boundary
+- `maxiter::Int = 100`: maximum number of iterations
+- `tol::Float64 = 1e-12`: convergence tolerance
+- `verbose::Bool = true`: when true, will print algorithm convergence progress
+"""
+@kwdef struct VUMPS <: AbstractBoundaryAlgorithm
     bonddim::Int
-    verbosity::Int = 0
     maxiter::Int = 100
     tol::Float64 = 1e-12
+    verbose::Bool = true
+    function VUMPS(bonddim::Int, maxiter::Float64, tol::Float64, verbose::Bool)
+        if maxiter == Inf
+            maxiter = typemax(Int)
+            return new(bonddim, maxiter, tol, verbose)
+        else
+            throw(
+                ArgumentError(
+                    "Unsupported `Float64` value of `maxiter`. Please supply an `Int`, or `Inf` for `maxiter = typemax(Int)`",
+                ),
+            )
+        end
+    end
+    function VUMPS(bonddim::Int, maxiter::Int, tol::Float64, verbose::Bool)
+        return new(bonddim, maxiter, tol, verbose)
+    end
 end
 
-struct VUMPSTensors{AType<:AbstractUnitCell,CType<:AbstractUnitCell,FType<:AbstractUnitCell} <: AbstractBoundaryTensors
+struct VUMPSTensors{
+    AType<:AbstractUnitCell,CType<:AbstractUnitCell,FType<:AbstractUnitCell
+} <: AbstractBoundaryTensors
     mps::MPS{AType,CType}
     fixedpoints::FixedPoints{FType}
 end
@@ -16,86 +44,54 @@ function Base.similar(vumps::VUMPSTensors)
     return VUMPSTensors(similar(vumps.mps), similar(vumps.fixedpoints))
 end
 
-function inittensors(bulk, alg::VUMPS; f=rand)
+function inittensors(f, bulk, alg::VUMPS)
     # D = @. getindex(domain(bulk), 4)
 
-    _, _, _, north_bonds = _bondspaces(bulk)
+    _, _, _, north_bonds = bondspace(bulk)
 
-    χ = dimtospace(bulk, alg.bonddim)
+    χ = dimtospace(spacetype(bulk), alg.bonddim)
 
-    boundary_mps = MPS(f, numbertype(bulk), lattice(bulk), north_bonds, χ)
+    chi = similar(north_bonds, typeof(χ))
+
+    chi .= Ref(χ)
+
+    boundary_mps = MPS(f, numbertype(bulk), north_bonds, chi)
 
     fixed_points = fixedpoints(boundary_mps, bulk)
 
     return VUMPSTensors(boundary_mps, fixed_points)
 end
 
-# function inittensors(f, T::Union{HilbertSchmidt,Trace}, alg::BoundaryAlgorithm{VUMPS})
-#     M = physicaltrace(T)
-#     return inittensors(f, M, alg)
-# end
-
-function calculate!(vumps::VUMPSTensors, bulk; kwargs...)
-    @info "Running VUMPS..."
-    return vumpsloop!(vumps, bulk; kwargs...)
-end
-
-# algorithm
-
-# Function barrier
-function vumpsloop!(
-    vumps::VUMPSTensors,
-    bulk::ContractableTensors;
-    verbosity=1,
-    tol=1e-12,
-    maxiter=100
-)
-    mps = vumps.mps
-    fixedpoints = vumps.fixedpoints
-
-    error = Inf
-    iterations = 0
-
+function start(state::BoundaryState{VUMPS})
+    vumps = state.tensors
     sing_val = x -> tsvd(x, (1,), (2,))[2]
-
-    singular_values = sing_val.(getbond(vumps.mps))
-
-    while error ≥ tol && iterations < maxiter
-        error = vumpsstep!(mps, fixedpoints, bulk)
-
-        verbosity > 0 && @info "\t Step $(iterations): error ≈ $(error)"
-
-        all_errors = boundaryerror!(singular_values, getbond(vumps.mps))
-
-        error = max(all_errors...)
-
-        iterations += 1
-    end
-
-    return error, iterations
+    return (sing_val.(getbond(vumps.mps)),)
 end
 
-function vumpsstep!(mps::MPS, fixedpoints::FixedPoints, bulk)
-    mps, errL, errR = vumpsupdate!(mps, fixedpoints, bulk) # Vectorised
+function step!(
+    vumps::VUMPSTensors,    #mutating
+    bulk::ContractableTensors,
+    ::VUMPS,
+    singular_values,        #mutating
+)
+    vumpsstep!(vumps, bulk)
 
-    fixedpoints!(fixedpoints, mps, bulk)
+    error_per_site = boundaryerror!(singular_values, getbond(vumps.mps))
 
-    erri = maximum(errL)
+    @debug "Error per site:" ϵᵢ = error_per_site
 
-    return erri
+    return max(error_per_site...)
 end
 
-function boundaryerror!(S_old::AbstractMatrix, C_new::AbstractMatrix)
-    S_new = boundaryerror.(S_old, C_new)
-    err = @. norm(S_old - S_new)
-    S_old .= S_new
-    return err
-end
+function vumpsstep!(vumps::VUMPSTensors, bulk)
+    mps = vumps.mps
+    fps = vumps.fixedpoints
 
-function boundaryerror(c_new::AbstractTensorMap)
-    _, s_new, _ = tsvd(c_new, (1,), (2,))
-    normalize!(s_new)
-    return s_new
+    vumpsupdate!(mps, fps, bulk) # Vectorised
+
+    fixedpoints!(fps, mps, bulk)
+
+    return vumps
 end
 
 # Bulk of work
@@ -119,10 +115,9 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
             RecursiveVec((AC[x, :])...),
             1,
             :LM;
-            ishermitian=false
+            ishermitian=false,
         )
 
-        # @info "μ1 $(μ1s[1])"
         for y in ry
             AC[x, y] = ACs[1][y]
         end
@@ -130,16 +125,15 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
 
         # A[mod(y - 1, ry)].AC[x] = ACs[1]
         μ0s, Cs, _ = eigsolve(
-            z -> applyhc(z, (FL[x+1, :]), (FR[x, :])),
+            z -> applyhc(z, (FL[x + 1, :]), (FR[x, :])),
             RecursiveVec((C[x, :])...),
             1,
             :LM;
-            ishermitian=false
+            ishermitian=false,
         )
 
-        # @info "μ0 $(μ0s[1]))"
-
-        # @info "λ = $(μ1s[1]/μ0s[1])"
+        @debug "Effective Hamiltonian eigenvalues:" μ1 = μ1s[1] μ0 = μ0s[1] μ1 / μ0 =
+            (μ1s[1] / μ0s[1])
 
         for y in ry
             C[x, y] = Cs[1][y]
@@ -151,10 +145,9 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
     #A now as updated AC, C, need to update AL, AR
     _, errL, errR = updateboth!(A)
 
-    errL, _ = findmax(errL)
-    errR, _ = findmax(errR)
-    # @info "errL = $errL \t errR = $errR"
-    return A, errL, errR
+    @debug "MPS update errors: " ϵL = findmax(errL)[1] ϵR = findmax(errR)[1]
+
+    return A
 end
 
 # EFFECTIVE HAMILTONIANS
@@ -246,6 +239,7 @@ function updateboth!(A::MPS)
     return A, errL, errR
 end
 
+#= 
 function tracecontract(vumps::VUMPSTensors, bulk)
     AC = getcentral(vumps.mps)
     FL = vumps.fixedpoints.left
@@ -261,7 +255,7 @@ function onelocalcontract(vumps::VUMPSTensors, bulk)
 
     return onelocalcontract.(FL, FR, AC, circshift(AC, (0, -1)), bulk)
 end
-#= 
+
 function metric(pepo::AbstractPEPO, vumps::VUMPSTensors, bond::Bond)
     fs = get_truncmetric_tensors(vumps.fixedpoints, bond)
 

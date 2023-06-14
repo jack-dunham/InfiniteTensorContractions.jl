@@ -4,7 +4,7 @@ abstract type AbstractMPS end
 @doc raw"""
     struct MPS
 """
-struct MPS{AType<:AbstractUnitCell{<:TenAbs{2}},CType<:AbstractUnitCell{<:AbsTen{0,2}}
+struct MPS{AType<:AbUnCe{<:TenAbs{2}},CType<:AbUnCe{<:AbsTen{0,2}}
 } <: AbstractMPS
     AL::AType
     C::CType
@@ -14,7 +14,15 @@ struct MPS{AType<:AbstractUnitCell{<:TenAbs{2}},CType<:AbstractUnitCell{<:AbsTen
         AL::AType, C::CType, AR::AType, AC::AType
     ) where {AType<:AbstractUnitCell,CType<:AbstractUnitCell}
         check_size_allequal(AL, C, AR, AC)
-        return new{AType,CType}(AL, C, AR, AC)
+        mps = new{AType,CType}(AL, C, AR, AC)
+        validate(mps)
+        return mps
+    end
+    function MPS(
+        AL::AType, C::CType, AR::AType, AC::AType
+    ) where {AType<:SubUnitCell,CType<:SubUnitCell}
+        mps = new{AType,CType}(AL, C, AR, AC)
+        return mps
     end
 end
 
@@ -31,7 +39,7 @@ unpack(mps::AbstractMPS) = (getleft(mps), getbond(mps), getright(mps), getcentra
 
 Base.size(mps::AbstractMPS) = size(getcentral(mps))
 Base.length(mps::AbstractMPS) = size(mps)[2]
-Base.similar(mps::M) where {M<:MPS} = MPS(similar.(unpack(mps))...; check=false)::M
+Base.similar(mps::M) where {M<:MPS} = MPS(similar.(unpack(mps))...)::M
 
 function Base.getindex(mps::AbstractMPS, y::Int)
     AL, C, AR, AC = unpack(mps)
@@ -60,11 +68,17 @@ end
 
 function isgauged(mps::AbstractMPS)
     for single_mps in mps
-        AL, C, AR, AC = unpack(single_mps)
-        for x in axes(AL, 1)
-            if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x-1], AR[x]) ≈ AC[x])
-                return false
+        unp = unpack(single_mps)
+        if all(isassigned, unpack(single_mps))
+            AL, C, AR, AC = unp
+            for x in axes(AL, 1)
+                if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x-1], AR[x]) ≈ AC[x])
+                    return false
+                end
             end
+        else
+            @debug "Undefined MPS. Skipping gauge check..."
+            return true
         end
     end
     return true
@@ -79,19 +93,19 @@ end
 
 # CONSTRUCTORS
 
-function MPS(f, T, lattice, D, χ; kwargs...)
-    return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
-end
+# function MPS(f, T, lattice, D, χ; kwargs...)
+#     return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
+# end
 
 function MPS(
-    f, T, D::AbstractUnitCell, right_bonds::AbstractUnitCell; kwargs...
+    f, T, D::AbstractUnitCell, right_bonds::AbstractUnitCell
 )
     left_bonds = circshift(right_bonds, (1, 0))
     data_lat = @. TensorMap(f, T, D, right_bonds * adjoint(left_bonds))
-    return MPS(data_lat; kwargs...)
+    return MPS(data_lat)
 end
 
-function MPS(A::AbstractUnitCell; kwargs...)
+function MPS(A::AbstractUnitCell)
     bonds = @. getindex(domain(A), 1) # Canonical bond (right-hand) bond of mps tensor
 
     T = numbertype(A)
@@ -100,19 +114,11 @@ function MPS(A::AbstractUnitCell; kwargs...)
     C = @. TensorMap(rand, T, one(bonds), bonds * adjoint(bonds)) # R * L
     AR = similar.(A)
 
-    mixedgauge!(AL, C, AR, A; kwargs...)
-    return MPS(AL, C, AR; kwargs...)
+    mixedgauge!(AL, C, AR, A)
+    return MPS(AL, C, AR)
 end
 
-MPS(AL, C, AR; kwargs...) = MPS(AL, C, AR, centraltensor(AL, C); kwargs...)
-
-function MPS(AL, C, AR, AC; check=true)
-    mps = MPS(AL, C, AR, AC)
-    if check
-        validate(mps)
-    end
-    return mps
-end
+MPS(AL, C, AR) = MPS(AL, C, AR, centraltensor(AL, C))
 
 # TENSOR OPERATIONS
 
@@ -123,10 +129,10 @@ _similar_ac(::Val{0}, ac1, ac2) = similar(ac2)
 _similar_ac(::Val{N}, ac1, ac2) where {N} = similar(ac1)
 
 centraltensor(A1, A2) = centraltensor!(_similar_ac.(A1, A2), A1, A2)
-function centraltensor!(AC, AL::AbstractUnitCell{<:TenAbs{2}}, C)
+function centraltensor!(AC, AL::AbUnCe{<:TenAbs{2}}, C)
     return mulbond!.(AC, AL, C)
 end
-function centraltensor!(AC, C::AbstractUnitCell{<:AbsTen{0,2}}, AR)
+function centraltensor!(AC, C::AbUnCe{<:AbsTen{0,2}}, AR)
     return mulbond!.(AC, circshift(C, (1, 0)), AR)
 end
 

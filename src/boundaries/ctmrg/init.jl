@@ -1,30 +1,30 @@
-function inittensors(bulk, alg::AbstractCornerMethod; f=rand)
+function inittensors(f, bulk, alg::AbstractCornerMethod)
     # Convert the bond dimension into an IndexSpace
-    chi = dimtospace(bulk, alg.bonddim)
+    chi = dimtospace(spacetype(bulk), alg.bonddim)
 
-    return inittensors(f, alg, bulk, chi)
-end
-function inittensors(
-    f, alg::AbstractCornerMethod, bulk, bonddim::IndexSpace
-)
-    corners = initcorners(f, bulk, bonddim)
-    edges = initedges(f, bulk, bonddim)
+    corners = initcorners(f, bulk, chi)
+    edges = initedges(f, bulk, chi)
 
-    return CornerMethodTensors(corners, edges)
+    return inittensors(corners, edges, alg)
 end
 
-function initpermuted(ctmrg::CornerMethodTensors)
-    C1_t, C2_t, C3_t, C4_t = transpose.(unpack(ctmrg.corners))
+inittensors(corners::Corners, edges::Edges, ::CTMRG) = CTMRGTensors(corners, edges)
+
+function initpermuted(ctmrg::CTMRGTensors)
+    C1_t, C2_t, C3_t, C4_t = permutedims.(unpack(ctmrg.corners))
+
     C1_tp = permute.(C1_t, Ref(()), Ref((2, 1)))
+    C2_tp = permute.(C2_t, Ref(()), Ref((2, 1)))
     C3_tp = permute.(C3_t, Ref(()), Ref((2, 1)))
+    C4_tp = permute.(C4_t, Ref(()), Ref((2, 1)))
 
-    corners_p = Corners(C1_tp, C4_t, C3_tp, C2_t)
+    corners_p = Corners(C1_tp, C4_tp, C3_tp, C2_tp)
 
-    T1_t, T2_t, T3_t, T4_t = transpose.(unpack(ctmrg.edges))
+    T1_t, T2_t, T3_t, T4_t = permutedims.(unpack(ctmrg.edges))
 
     edges_p = Edges(T4_t, T3_t, T2_t, T1_t)
 
-    return CornerMethodTensors(corners_p, edges_p)
+    return CTMRGTensors(corners_p, edges_p)
 end
 
 function initprojectors(bulk, chi::IndexSpace)
@@ -59,7 +59,7 @@ function initcorners(f, bulk, chi::S) where {S<:IndexSpace}
 
     chi_uc = similar(bulk, S)
 
-    chi_uc = fill(chi_uc, chi)
+    fill!(chi_uc, chi)
 
     C1 = @. TensorMap(f, el, nil, chi_uc * chi_uc)
     C2 = @. TensorMap(f, el, nil, adjoint(chi_uc) * adjoint(chi_uc))
@@ -73,7 +73,7 @@ function initedges(f, bulk, chi::IndexSpace)
 
     el = numbertype(bulk)
 
-    east_bonds, south_bonds, west_bonds, north_bonds = _bondspaces(bulk)
+    east_bonds, south_bonds, west_bonds, north_bonds = bondspace(bulk)
 
     T1 = @. TensorMap(f, el, $circshift(north_bonds, (0, -1)), dom)
     T2 = @. TensorMap(f, el, $circshift(east_bonds, (-1, 0)), dom)
@@ -83,7 +83,7 @@ function initedges(f, bulk, chi::IndexSpace)
     return Edges(T1, T2, T3, T4)
 end
 
-function initerror(ctmrg::CornerMethodTensors)
+function initerror(ctmrg::CTMRGTensors)
     temp_tsvd = x -> tsvd(x)[2]
     # Permute into some form compatible with tsvd
     S1, S2, S3, S4 = map(

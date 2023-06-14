@@ -1,4 +1,4 @@
-abstract type AbstractContractableTensors{G,ElType} <: AbstractUnitCell{G,ElType} end
+abstract type AbstractContractableTensors{G,ElType,A} <: AbstractUnitCell{G,ElType,A} end
 
 abstract type ContractableTrait end
 struct IsContractable <: ContractableTrait end
@@ -10,35 +10,36 @@ ContractableTrait(::Type{<:AbsTen{2,4}}) = IsContractable()
 ContractableTrait(::Type) = NotContractable()
 
 
-struct ContractableTensors{G,ElType,A<:AbstractUnitCell{G,ElType}} <: AbstractContractableTensors{G,ElType}
-    data::A
+struct ContractableTensors{G,ElType,A,U<:AbstractUnitCell{G,ElType,A}} <: AbstractContractableTensors{G,ElType,A}
+    data::U
 end
+
+ContractableTensors(data) = ContractableTensors{Square}(data)
+ContractableTensors{G}(data) where {G} = ContractableTensors(UnitCell{G}(data))
 
 @inline getdata(ct::ContractableTensors) = ct.data
 
-struct ContractableTensorsStyle{G,T,A} <: AbstractUnitCellStyle{G,T} end
+struct ContractableTensorsStyle{G,A} <: AbstractUnitCellStyle{G,A} end
 
-@inline function Base.BroadcastStyle(::Type{ContractableTensors{G,ElType,A}}) where {G,ElType,A}
-    return ContractableTensorsStyle{G,ElType,A}()
+@inline function Base.BroadcastStyle(::Type{<:ContractableTensors{G,ElType, A}}) where {G,ElType, A} 
+    ContractableTensorsStyle{G, typeof(Base.BroadcastStyle(A))}()
+end
+@inline function Base.BroadcastStyle(::ContractableTensorsStyle{G,A}, ::AbstractUnitCellStyle{G,B}) where {G, A, B} 
+    ContractableTensorsStyle{G, typeof(Base.BroadcastStyle(A(),B()))}()
 end
 
-@inline function Base.BroadcastStyle(::ContractableTensorsStyle{G,T,A}, ::Broadcast.ArrayStyle) where {G,T,A}
-    return Base.BroadcastStyle(A)
-end
-
-@inline function Base.similar(bc::Broadcast.Broadcasted{ContractableTensorsStyle{G,T,A}}, ::Type{ElType}) where {G,T,A,ElType}
+@inline function Base.similar(bc::Broadcast.Broadcasted{ContractableTensorsStyle{G,A}}, ::Type{ElType}) where {G,A,ElType}
     return _similar(ContractableTrait(ElType), bc, ElType)
 end
 
-@inline function _similar(bc::Broadcast.Broadcasted{ContractableTensorsStyle{G,T,A}}, ::Type{ElType}) where {G,T,A,ElType}
-    return similar(convert(Broadcast.Broadcasted{typeof(Broadcast.BroadcastStyle(A))}, bc), ElType)
+
+@inline function _similar(::IsContractable, bc::Broadcast.Broadcasted{ContractableTensorsStyle{G,A}}, ::Type{ElType}) where {G,A,ElType}
+    return ContractableTensors{G}(similar(Base.convert(Broadcast.Broadcasted{A}, bc), ElType))
+end
+@inline function  _similar(::NotContractable, bc::Broadcast.Broadcasted{ContractableTensorsStyle{G,A}}, ::Type{ElType}) where {G,A,ElType} 
+    return similar(Base.convert(Broadcast.Broadcasted{UnitCellStyle{G,A}}, bc),   ElType)
 end
 
-@inline _similar(::IsContractable, bc, ::Type{ElType}) where {ElType} = ContractableTensors(_similar(bc, ElType))
-@inline _similar(::NotContractable, bc, ::Type{ElType}) where {ElType} = _similar(bc, ElType)
-
-ContractableTensors(data) = ContractableTensors(UnitCell{Square}(data))
-ContractableTensors{G}(data) where {G} = ContractableTensors(UnitCell{G}(data))
 # ContractableTensors{G,T,A}(data::A) where {G,T,A<:AbstractMatrix{T}} = ContractableTensors{G}(data)
 
 ## Implement functions for contractable tensors etc
