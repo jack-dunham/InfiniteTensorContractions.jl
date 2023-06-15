@@ -1,11 +1,21 @@
 abstract type AbstractCornerMethod <: AbstractBoundaryAlgorithm end
 
+"""
+    CTMRG{SVD<:OrthogonalFactorizationAlgorithm}
+
+# Fields
+- `bonddim::Int`: the bond dimension of the boundary
+- `maxiter::Int = 100`: maximum number of iterations
+- `tol::Float64 = 1e-12`: convergence tolerance
+- `verbose::Bool = true`: when true, will print algorithm convergence progress
+- `ptol::Float64 = 1e-7`: tolerance used in the pseudoinverse
+- `svd_alg::SVD = TensorKit.SVD()`: algorithm used for the SVD. Either `TensorKit.SVD()` or `TensorKit.SDD()`
+"""
 @kwdef struct CTMRG{SVD<:OrthogonalFactorizationAlgorithm} <: AbstractCornerMethod
     bonddim::Int
-    verbosity::Int = 0
     maxiter::Int = 100
     tol::Float64 = 1e-12
-    breaktol::Float64 = 0.0
+    verbose::Int = true
     ptol::Float64 = 1e-7
     svd_alg::SVD = TensorKit.SVD()
 end
