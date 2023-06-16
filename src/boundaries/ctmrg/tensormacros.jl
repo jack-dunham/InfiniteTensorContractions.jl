@@ -43,11 +43,11 @@ end
 ## DOUBLE LAYER
 
 function _projectedge!(
-    t_dst::T, t_src::T, ma::M, u::UV, v::UV
+    t_dst::T, t_src::T, m::M, u::UV, v::UV
 ) where {
-    S,N,T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,N,4},UV<:AbstractTensorMap{S,3,1}
+    S,T<:AbstractTensorMap{S,2,2},M<:TensorPair,UV<:AbstractTensorMap{S,3,1}
 }
-    return _projectedge!(t_dst, t_src, ma, ma, u, v)
+    return _projectedge!(t_dst, t_src, m.bot, m.top, u, v)
 end
 
 function _projectedge!(
@@ -115,7 +115,7 @@ end
 function halfcontract(
     C1_00::C, T1_10::T, T1_20::T, C2_30::C, T4_01::T, M_11::M, M_21::M, T2_31::T
 ) where {
-    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,1,2},M<:AbstractTensorMap{S,0,4}
+    S,C<:AbstractTensorMap{S,0,2},T<:AbstractTensorMap{S,1,2},M<:AbstractTensorMap{S,0,4}
 }
     @tensoropt out[v8 v7; v5 v6] :=
         C1_00[h1 v1] *
@@ -133,12 +133,10 @@ end
 ## DOUBLE LAYER METHODS
 
 function halfcontract(
-    C1_00::C, T1_10::T, T1_20::T, C2_30::C, T4_01::T, M_11a::M, M_21a::M, T2_31::T
-) where {
-    S,N,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,N,4}
-}
+    C1_00::C, T1_10::T, T1_20::T, C2_30::C, T4_01::T, M_11::M, M_21::M, T2_31::T
+) where {S,C<:AbstractTensorMap{S,0,2},T<:AbstractTensorMap{S,2,2},M<:TensorPair}
     return halfcontract(
-        C1_00, T1_10, T1_20, C2_30, T4_01, M_11a, M_11a, M_21a, M_21a, T2_31
+        C1_00, T1_10, T1_20, C2_30, T4_01, M_11.top, M_11.bot, M_21.top, M_21.bot, T2_31
     )
 end
 
@@ -154,7 +152,7 @@ function halfcontract(
     M_21b::M,
     T2_31::T,
 ) where {
-    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,1,4}
+    S,C<:AbstractTensorMap{S,0,2},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,1,4}
 }
     @tensoropt (
         k1 => 2,
@@ -207,7 +205,7 @@ function halfcontract(
     M_21b::M,
     T2_31::T,
 ) where {
-    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,2,4}
+    S,C<:AbstractTensorMap{S,0,2},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,2,4}
 }
     @tensoropt (
         k1 => 2,

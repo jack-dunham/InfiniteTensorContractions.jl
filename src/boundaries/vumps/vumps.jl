@@ -44,20 +44,20 @@ function Base.similar(vumps::VUMPSTensors)
     return VUMPSTensors(similar(vumps.mps), similar(vumps.fixedpoints))
 end
 
-function inittensors(f, bulk, alg::VUMPS)
-    # D = @. getindex(domain(bulk), 4)
+function inittensors(f, network, alg::VUMPS)
+    # D = @. getindex(domain(network), 4)
 
-    _, _, _, north_bonds = bondspace(bulk)
+    _, _, _, north_bonds = bondspace(network)
 
-    χ = dimtospace(spacetype(bulk), alg.bonddim)
+    χ = dimtospace(spacetype(network), alg.bonddim)
 
     chi = similar(north_bonds, typeof(χ))
 
     chi .= Ref(χ)
 
-    boundary_mps = MPS(f, numbertype(bulk), north_bonds, chi)
+    boundary_mps = MPS(f, numbertype(network), north_bonds, chi)
 
-    fixed_points = fixedpoints(boundary_mps, bulk)
+    fixed_points = fixedpoints(boundary_mps, network)
 
     return VUMPSTensors(boundary_mps, fixed_points)
 end
@@ -70,11 +70,11 @@ end
 
 function step!(
     vumps::VUMPSTensors,    #mutating
-    bulk::ContractableTensors,
+    network::AbstractNetwork,
     ::VUMPS,
     singular_values,        #mutating
 )
-    vumpsstep!(vumps, bulk)
+    vumpsstep!(vumps, network)
 
     error_per_site = boundaryerror!(singular_values, getbond(vumps.mps))
 
@@ -83,13 +83,13 @@ function step!(
     return max(error_per_site...)
 end
 
-function vumpsstep!(vumps::VUMPSTensors, bulk)
+function vumpsstep!(vumps::VUMPSTensors, network)
     mps = vumps.mps
     fps = vumps.fixedpoints
 
-    vumpsupdate!(mps, fps, bulk) # Vectorised
+    vumpsupdate!(mps, fps, network) # Vectorised
 
-    fixedpoints!(fps, mps, bulk)
+    fixedpoints!(fps, mps, network)
 
     return vumps
 end
@@ -240,20 +240,20 @@ function updateboth!(A::MPS)
 end
 
 #= 
-function tracecontract(vumps::VUMPSTensors, bulk)
+function tracecontract(vumps::VUMPSTensors, network)
     AC = getcentral(vumps.mps)
     FL = vumps.fixedpoints.left
     FR = vumps.fixedpoints.right
-    return tracecontract.(FL, FR, AC, circshift(AC, (0, -1)), bulk)
+    return tracecontract.(FL, FR, AC, circshift(AC, (0, -1)), network)
 end
-function onelocalcontract(vumps::VUMPSTensors, bulk)
+function onelocalcontract(vumps::VUMPSTensors, network)
     AC = getcentral(vumps.mps)
     FL = vumps.fixedpoints.left
     FR = vumps.fixedpoints.right
 
-    cod = codomain.(bulk)
+    cod = codomain.(network)
 
-    return onelocalcontract.(FL, FR, AC, circshift(AC, (0, -1)), bulk)
+    return onelocalcontract.(FL, FR, AC, circshift(AC, (0, -1)), network)
 end
 
 function metric(pepo::AbstractPEPO, vumps::VUMPSTensors, bond::Bond)
@@ -266,7 +266,7 @@ function metric(pepo::AbstractPEPO, vumps::VUMPSTensors, bond::Bond)
     return truncmetriccontract(fs..., as..., ms...)
 end
 
-function truncmetric!(dst, vumps::VUMPSTensors, bulk::ContractableTensors)
+function truncmetric!(dst, vumps::VUMPSTensors, network::ContractableTensors)
     mps = vumps.mps
 
     AC = getcentral(mps)
@@ -275,9 +275,9 @@ function truncmetric!(dst, vumps::VUMPSTensors, bulk::ContractableTensors)
     FL = vumps.fixedpoints.left
     FR = vumps.fixedpoints.right
 
-    # for x in axes(bulk, 1)
-    #     for y in axes(bulk, 2)
-    #         truncmetriccontract!(dst[x,y],FL[x,y],AC[x,y],AC[x,y+1],AR[x+1,y],AR[x+1,y+1],bulk[x,y],bulk[x+1,y],FR[x+1,y])
+    # for x in axes(network, 1)
+    #     for y in axes(network, 2)
+    #         truncmetriccontract!(dst[x,y],FL[x,y],AC[x,y],AC[x,y+1],AR[x+1,y],AR[x+1,y+1],network[x,y],network[x+1,y],FR[x+1,y])
     #     end
     # end
     #
@@ -291,8 +291,8 @@ function truncmetric!(dst, vumps::VUMPSTensors, bulk::ContractableTensors)
         circshift(AC, (0, -1)),
         circshift(AR, (-1, 0)),
         circshift(AR, (-1, -1)),
-        bulk,
-        circshift(bulk, (-1, 0)),
+        network,
+        circshift(network, (-1, 0)),
     )
 end
 

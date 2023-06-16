@@ -3,16 +3,16 @@ abstract type AbstractContractionState{Alg<:AbstractContractionAlgorithm} end
 abstract type AbstractContractionTensors end
 
 """
-    initialize(bulk::AbstractContractableTensors, alg::AbstractContractionAlgorithm; kwargs...)
-    initialize(bulk::AbstractContractableTensors, alg::AbstractContractionAlgorithm, initial_tensors::AbstractContractionTensors; kwargs...)
+    initialize(network::AbstractNetwork, alg::AbstractContractionAlgorithm; kwargs...)
+    initialize(network::AbstractNetwork, alg::AbstractContractionAlgorithm, initial_tensors::AbstractContractionTensors; kwargs...)
 
-Initialize an algorithm state to contract tensors `bulk` using algorithm `alg`. The keyword argument `store_initial`
+Initialize an algorithm state to contract network of tensors `network` using algorithm `alg`. The keyword argument `store_initial`
 determines whether or not the initial state of the contraction tensors is copied and stored in the field
 `initial_tensors` of the returned `AbstractContractionState` object.
 
 # Arguments
-- `bulk::AbstractContractionTensors`: the unitcell of tensors to be contracted
-- `alg::AbstractContractionAlgorithm`: the algorithm to contract `bulk` with
+- `network::AbstractNetwork`: the unitcell of tensors to be contracted
+- `alg::AbstractContractionAlgorithm`: the algorithm to contract `network` with
 - `initial_tensors::AbstractContractionTensors`: initial tensors to use (optional)
 
 # Keywords
@@ -27,8 +27,6 @@ determines whether or not the initial state of the contraction tensors is copied
 function initialize end
 const initialise = initialize
 
-
-
 """
     calculate(alg_state::AbstractContractionState)
 
@@ -39,7 +37,7 @@ calculate(alg_state::AbstractContractionState) = calculate!(deepcopy(alg_state))
 """
     calculate!(alg_state::AbstractContractionState)
 
-Calculate the contraction tensors required to contract `alg_state.bulk` using `alg_state.alg`. Returns
+Calculate the contraction tensors required to contract `alg_state.network` using `alg_state.alg`. Returns
 mutated `alg_state`. Use `calculate` for a non-mutating version of the same function.
 """
 function calculate!(alg_state::AbstractContractionState)
@@ -142,17 +140,17 @@ end
 #     end
 # end
 
-function contract(tensors, bulk)
-    return contract.(tensors, bulk, CartesianIndices(bulk))
+function contract(tensors, network)
+    return contract.(tensors, network, CartesianIndices(network))
 end
 
-contract(tensors, bulk, i1::Int, i2::Int) = contract(tensors, bulk, i1:i1, i2:i2)
-contract(tensors, bulk, inds) = contract(tensors, bulk, inds...)
+contract(tensors, network, i1::Int, i2::Int) = contract(tensors, network, i1:i1, i2:i2)
+contract(tensors, network, inds) = contract(tensors, network, inds...)
 
-function contract(ctmrg, bulk, i1::UnitRange, i2::UnitRange)
+function contract(ctmrg, network, i1::UnitRange, i2::UnitRange)
     cs = ctmrg.corners[i1, i2]
     es = map(x -> tuple(x...), ctmrg.edges[i1, i2])
-    return _contractall(cs..., es..., bulk)
+    return _contractall(cs..., es..., network)
 end
 
 function get_bond_symbol(i, j, dir)

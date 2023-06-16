@@ -15,9 +15,9 @@ function applyhac!(
     ac::AbstractTensorMap{S,2,2},
     fl::AbstractTensorMap{S,2,2},
     fr::AbstractTensorMap{S,2,2},
-    ma::AbstractTensorMap{S,N,4},
-) where {S,N}
-    return applyhac!(hac, ac, fl, fr, ma, ma)
+    m::TensorPair,
+) where {S}
+    return applyhac!(hac, ac, fl, fr, m.top, m.bot)
 end
 
 function applyhac!(

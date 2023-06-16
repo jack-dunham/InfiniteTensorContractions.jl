@@ -15,7 +15,7 @@ abstract type AbstractCornerMethod <: AbstractBoundaryAlgorithm end
     bonddim::Int
     maxiter::Int = 100
     tol::Float64 = 1e-12
-    verbose::Int = true
+    verbose::Bool = true
     ptol::Float64 = 1e-7
     svd_alg::SVD = TensorKit.SVD()
 end
@@ -86,6 +86,7 @@ function Base.getindex(edges::Edges, i...)
     return t1s, t2s, t3s, t4s
 end
 
+
 function updatecorners!(corners::C, corners_p::C) where {C<:Corners}
     C1, C2, C3, C4 = unpack(corners)
     C1_p, C2_p, C3_p, C4_p = unpack(corners_p)
@@ -105,10 +106,10 @@ contraction_boundary_type(::CTMRGTensors) = CTMRG
 
 ## Top level
 
-function run!(ctmrg::CTMRGTensors, bulk, alg::CTMRG; kwargs...)
+function run!(ctmrg::CTMRGTensors, network, alg::CTMRG; kwargs...)
     return ctmrgloop!(
         ctmrg,
-        bulk;
+        network;
         bonddim=alg.bonddim,
         verbosity=alg.verbosity,
         tol=alg.tol,
@@ -117,34 +118,34 @@ function run!(ctmrg::CTMRGTensors, bulk, alg::CTMRG; kwargs...)
 end
 
 function ctmrgloop!(
-    ctmrg::CTMRGTensors, bulk; bonddim=2, verbosity=1, tol=1e-12, maxiter=100, kwargs...
+    ctmrg::CTMRGTensors, network; bonddim=2, verbosity=1, tol=1e-12, maxiter=100, kwargs...
 )
-    bondspace = dimtospace(spacetype(bulk), bonddim)
+    bondspace = dimtospace(spacetype(network), bonddim)
 
     ctmrg_p = initpermuted(ctmrg)
-    bulk_p = swapaxes(bulk)
+    network_p = swapaxes(network)
 
-    x_projectors = initprojectors(bulk, bondspace)
-    y_projectors = initprojectors(bulk_p, bondspace)
+    x_projectors = initprojectors(network, bondspace)
+    y_projectors = initprojectors(network_p, bondspace)
 
     S1, S2, S3, S4 = initerror(ctmrg)
 
     error = Inf
     iterations = 0
 
-    # bulk_tensors = contractphysical_maybe.(bulk)
-    # bulk_tensors_p = contractphysical_maybe.(bulk_p)
+    # network_tensors = contractphysical_maybe.(network)
+    # network_tensors_p = contractphysical_maybe.(network_p)
 
     while error > tol && iterations < maxiter
 
         # Sweep along the x axis (left/right)
-        ctmrgmove!(ctmrg, x_projectors, bulk, bonddim; kwargs...)
+        ctmrgmove!(ctmrg, x_projectors, network, bonddim; kwargs...)
 
         # Write updated tensors into the permuted placeholders
         updatecorners!(ctmrg_p, ctmrg)
 
         # Sweep along the y axis (up/down)
-        ctmrgmove!(ctmrg_p, y_projectors, bulk_p, bonddim; kwargs...)
+        ctmrgmove!(ctmrg_p, y_projectors, network_p, bonddim; kwargs...)
 
         # Update the unpermuted (true) tensors.
         updatecorners!(ctmrg, ctmrg_p)
@@ -161,28 +162,28 @@ end
 
 function start(state)
     bonddim = state.alg.bonddim
-    bulk = state.bulk
+    network = state.network
     ctmrg = state.tensors
 
-    bondspace = dimtospace(spacetype(bulk), bonddim)
+    bondspace = dimtospace(spacetype(network), bonddim)
 
     ctmrg_p = initpermuted(ctmrg)
-    bulk_p = swapaxes(bulk)
+    network_p = swapaxes(network)
 
-    x_projectors = initprojectors(bulk, bondspace)
-    y_projectors = initprojectors(bulk_p, bondspace)
+    x_projectors = initprojectors(network, bondspace)
+    y_projectors = initprojectors(network_p, bondspace)
 
     S1, S2, S3, S4 = initerror(ctmrg)
 
-    return ctmrg_p, bulk_p, x_projectors, y_projectors, S1, S2, S3, S4
+    return ctmrg_p, network_p, x_projectors, y_projectors, S1, S2, S3, S4
 end
 
 function step!(
     ctmrg::CTMRGTensors,# mutating 
-    bulk,
+    network,
     alg::CTMRG,
     ctmrg_p,            # mutating
-    bulk_p,             # mutating
+    network_p,             # mutating
     x_projectors,       # mutating
     y_projectors,       # mutating
     S1,                 # mutating
@@ -192,13 +193,13 @@ function step!(
 )
     bonddim = alg.bonddim
 
-    ctmrgmove!(ctmrg, x_projectors, bulk, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol)
+    ctmrgmove!(ctmrg, x_projectors, network, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol)
 
     # Write updated tensors into the permuted placeholders
     updatecorners!(ctmrg_p, ctmrg)
 
     # Sweep along the y axis (up/down)
-    ctmrgmove!(ctmrg_p, y_projectors, bulk_p, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol)
+    ctmrgmove!(ctmrg_p, y_projectors, network_p, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol)
 
     # Update the unpermuted (true) tensors.
     updatecorners!(ctmrg, ctmrg_p)
@@ -278,13 +279,13 @@ function biorth_truncation(U0, V0, xi; ptol=1e-7, svd_alg=TensorKit.SVD())
     return U, V
 end
 
-function ctmrgmove!(ctmrg::CTMRGTensors, proj::Projectors, bulk, bonddim; kwargs...)
+function ctmrgmove!(ctmrg::CTMRGTensors, proj::Projectors, network, bonddim; kwargs...)
     C1, C2, C3, C4 = unpack(ctmrg.corners)
     T1, T2, T3, T4 = unpack(ctmrg.edges)
     UL, VL, UR, VR = unpack(proj)
 
-    for x in axes(bulk, 1)
-        for y in axes(bulk, 2)
+    for x in axes(network, 1)
+        for y in axes(network, 2)
             # println(x,"",y)
             UL[x + 0, y + 1], VL[x + 0, y + 1], UR[x + 3, y + 1], VR[x + 3, y + 1] = projectors(
                 C1[x + 0, y + 0],
@@ -299,15 +300,15 @@ function ctmrgmove!(ctmrg::CTMRGTensors, proj::Projectors, bulk, bonddim; kwargs
                 T3[x + 2, y + 3],
                 T4[x + 0, y + 1],
                 T4[x + 0, y + 2],
-                bulk[x + 1, y + 1],
-                bulk[x + 2, y + 1],
-                bulk[x + 1, y + 2],
-                bulk[x + 2, y + 2],
+                network[x + 1, y + 1],
+                network[x + 2, y + 1],
+                network[x + 1, y + 2],
+                network[x + 2, y + 2],
                 bonddim;
                 kwargs...,
             )
         end
-        for y in axes(bulk, 2)
+        for y in axes(network, 2)
             projectcorner!(
                 C1[x + 1, y + 0], C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
             )
@@ -329,14 +330,14 @@ function ctmrgmove!(ctmrg::CTMRGTensors, proj::Projectors, bulk, bonddim; kwargs
             projectedge!(
                 T4[x + 1, y + 1],
                 T4[x + 0, y + 1],
-                bulk[x + 1, y + 1],
+                network[x + 1, y + 1],
                 UL[x + 0, y + 0],
                 VL[x + 0, y + 1],
             )
             projectedge!(
                 T2[x + 2, y + 1],
                 T2[x + 3, y + 1],
-                invertaxes(bulk[x + 2, y + 1]),
+                invertaxes(network[x + 2, y + 1]),
                 VR[x + 3, y + 1],
                 UR[x + 3, y + 0],
             )
@@ -364,103 +365,17 @@ function updatecorners!(ctmrg::CTMRGTensors, ctmrg_p::CTMRGTensors)
     updatecorners!(ctmrg.corners, ctmrg_p.corners)
     return ctmrg
 end
-# function ctmrgmove!(ctmrg::CTMRG, bulk, bonddim)
-#     cs = ctmrg.corners
-#     ts = ctmrg.edges
-#     projectors = ctmrg.xproj
-#     for x in axes(M, 1)
-#         for y in axes(M, 2)
-#             c1, c2, c3, c4 = cs[x + 1, y + 1]
-#             # println(x,"",y)
-#             UL[x + 0, y + 1], VL[x + 0, y + 1], UR[x + 3, y + 1], VR[x + 3, y + 1] = projectors(
-#                 C1[x + 0, y + 0],
-#                 C2[x + 3, y + 0],
-#                 C3[x + 3, y + 3],
-#                 C4[x + 0, y + 3],
-#                 T1[x + 1, y + 0],
-#                 T1[x + 2, y + 0],
-#                 T2[x + 3, y + 1],
-#                 T2[x + 3, y + 2],
-#                 T3[x + 1, y + 3],
-#                 T3[x + 2, y + 3],
-#                 T4[x + 0, y + 1],
-#                 T4[x + 0, y + 2],
-#                 M[x + 1, y + 1],
-#                 M[x + 2, y + 1],
-#                 M[x + 1, y + 2],
-#                 M[x + 2, y + 2],
-#                 dim(D),
-#             )
-#         end
-#         for y in axes(M, 2)
-#             project_corner!(
-#                 C1[x + 1, y + 0], C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
-#             )
-#             project_corner!(
-#                 C2[x + 2, y + 0],
-#                 C2[x + 3, y + 0],
-#                 permute(T1[x + 2, y + 0], (1,), (3, 2)),
-#                 VR[x + 3, y + 0],
-#             )
-#             project_corner!(
-#                 C3[x + 2, y + 3], C3[x + 3, y + 3], T3[x + 2, y + 3], UR[x + 3, y + 2]
-#             )
-#             project_corner!(
-#                 C4[x + 1, y + 3],
-#                 C4[x + 0, y + 3],
-#                 permute(T3[x + 1, y + 3], (1,), (3, 2)),
-#                 UL[x + 0, y + 2],
-#             )
-#             project_edge!(
-#                 T4[x + 1, y + 1],
-#                 T4[x + 0, y + 1],
-#                 M[x + 1, y + 1],
-#                 UL[x + 0, y + 0],
-#                 VL[x + 0, y + 1],
-#             )
-#             project_edge!(
-#                 T2[x + 2, y + 1],
-#                 T2[x + 3, y + 1],
-#                 permute(M[x + 2, y + 1], (3, 4, 1, 2)),
-#                 VR[x + 3, y + 1],
-#                 UR[x + 3, y + 0],
-#             )
-#         end
-#     end
-#
-#     normalize!.(C1)
-#     normalize!.(C2)
-#     normalize!.(C3)
-#     normalize!.(C4)
-#     normalize!.(T1)
-#     normalize!.(T2)
-#     normalize!.(T3)
-#     normalize!.(T4)
-#
-#     return nothing
-# end
-
-# function initprojectors(bulk_tensors::ContractableTensor, chi::IndexSpace)
-#     east_bonds, south_bonds, west_bonds, north_bonds = bondspaces_onlattice(bulk)
-#
-#     T = numbertype(bulk_tensors)
-#
-#     projx = _initprojectors(T, north_bonds, south_bonds, chi)
-#     projy = _initprojectors(T, east_bonds, west_bonds, chi)
-#
-#     return UL, VL, UR, VR
-# end
 
 function testctmrg(data_func)
     βc = log(1 + sqrt(2)) / 2
 
     s = ℂ^2
 
-    bulk =
+    network =
         x -> ContractableTensors(
             fill(TensorMap((data_func(x)[1]), one(s), s * s * s' * s'), 2, 2)
         )
-    bulk_magn =
+    network_magn =
         x -> ContractableTensors(
             fill(TensorMap(data_func(x)[2], one(s), s * s * s' * s'), 2, 2)
         )
@@ -471,8 +386,8 @@ function testctmrg(data_func)
     alg = CTMRG(; bonddim=2, verbosity=1, maxiter=200)
 
     for x in 1.1:0.001:2
-        b1 = bulk(x * βc)
-        b2 = bulk_magn(x * βc)
+        b1 = network(x * βc)
+        b2 = network_magn(x * βc)
 
         state = initialize(b1, alg)
 

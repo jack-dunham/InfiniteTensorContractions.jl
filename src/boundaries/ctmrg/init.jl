@@ -1,9 +1,9 @@
-function inittensors(f, bulk, alg::AbstractCornerMethod)
+function inittensors(f, network, alg::AbstractCornerMethod)
     # Convert the bond dimension into an IndexSpace
-    chi = dimtospace(spacetype(bulk), alg.bonddim)
+    chi = dimtospace(spacetype(network), alg.bonddim)
 
-    corners = initcorners(f, bulk, chi)
-    edges = initedges(f, bulk, chi)
+    corners = initcorners(f, network, chi)
+    edges = initedges(f, network, chi)
 
     return inittensors(corners, edges, alg)
 end
@@ -27,10 +27,10 @@ function initpermuted(ctmrg::CTMRGTensors)
     return CTMRGTensors(corners_p, edges_p)
 end
 
-function initprojectors(bulk, chi::IndexSpace)
-    _, bot_bonds, _, top_bonds = bondspace(bulk)
+function initprojectors(network, chi::IndexSpace)
+    _, bot_bonds, _, top_bonds = bondspace(network)
 
-    T = numbertype(bulk)
+    T = numbertype(network)
 
     projectors = _initprojectors(T, top_bonds, bot_bonds, chi)
 
@@ -51,13 +51,13 @@ function _initprojectors(T::Type{<:Number}, top_bonds, bot_bonds, chi::IndexSpac
     return Projectors(UL, VL, UR, VR)
 end
 
-function initcorners(f, bulk, chi::S) where {S<:IndexSpace}
+function initcorners(f, network, chi::S) where {S<:IndexSpace}
     nil = one(chi)
     nil = Ref(nil)
 
-    el = numbertype(bulk)
+    el = numbertype(network)
 
-    chi_uc = similar(bulk, S)
+    chi_uc = similar(network, S)
 
     fill!(chi_uc, chi)
 
@@ -68,12 +68,12 @@ function initcorners(f, bulk, chi::S) where {S<:IndexSpace}
 
     return Corners(C1, C2, C3, C4)
 end
-function initedges(f, bulk, chi::IndexSpace)
+function initedges(f, network, chi::IndexSpace)
     dom = Ref(chi * chi')
 
-    el = numbertype(bulk)
+    el = numbertype(network)
 
-    east_bonds, south_bonds, west_bonds, north_bonds = bondspace(bulk)
+    east_bonds, south_bonds, west_bonds, north_bonds = bondspace(network)
 
     T1 = @. TensorMap(f, el, $circshift(north_bonds, (0, -1)), dom)
     T2 = @. TensorMap(f, el, $circshift(east_bonds, (-1, 0)), dom)

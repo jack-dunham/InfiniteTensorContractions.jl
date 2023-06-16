@@ -4,8 +4,7 @@ abstract type AbstractMPS end
 @doc raw"""
     struct MPS
 """
-struct MPS{AType<:AbUnCe{<:TenAbs{2}},CType<:AbUnCe{<:AbsTen{0,2}}
-} <: AbstractMPS
+struct MPS{AType<:AbUnCe{<:TenAbs{2}},CType<:AbUnCe{<:AbsTen{0,2}}} <: AbstractMPS
     AL::AType
     C::CType
     AR::AType
@@ -72,7 +71,7 @@ function isgauged(mps::AbstractMPS)
         if all(isassigned, unpack(single_mps))
             AL, C, AR, AC = unp
             for x in axes(AL, 1)
-                if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x-1], AR[x]) ≈ AC[x])
+                if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x - 1], AR[x]) ≈ AC[x])
                     return false
                 end
             end
@@ -97,9 +96,7 @@ end
 #     return MPS(f, T, _fill_all_maybe(lattice, D, χ)...; kwargs...)
 # end
 
-function MPS(
-    f, T, D::AbstractUnitCell, right_bonds::AbstractUnitCell
-)
+function MPS(f, T, D::AbstractUnitCell, right_bonds::AbstractUnitCell)
     left_bonds = circshift(right_bonds, (1, 0))
     data_lat = @. TensorMap(f, T, D, right_bonds * adjoint(left_bonds))
     return MPS(data_lat)
@@ -162,9 +159,6 @@ function mulbond!(
     return @tensoropt AC[p1 p2; xr xl] = A[p1 p2; x_in xl] * C[xr x_in]
 end
 
-# MAYBE DEPREC
-
-westbond(mps::MPS) = westbond.(mps.AC)
 
 # DEPREC
 #=

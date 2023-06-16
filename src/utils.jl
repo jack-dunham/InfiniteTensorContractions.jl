@@ -160,6 +160,7 @@ function isinitialised(arr::AbstractTensorMap, i)
 end
 isinitialised(arr, i) = isassigned(arr, i)
 
+numbertype(t::AbstractTensorMap) = eltype(t)
 
 
 

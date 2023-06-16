@@ -1,5 +1,6 @@
 abstract type AbstractUnitCellGeometry end
-abstract type AbstractUnitCell{G<:AbstractUnitCellGeometry,ElType,A} <: AbstractMatrix{ElType} end
+abstract type AbstractUnitCell{G<:AbstractUnitCellGeometry,ElType,A} <:
+              AbstractMatrix{ElType} end
 
 const AbUnCe{T,G,A} = AbstractUnitCell{G,T,A}
 
@@ -11,7 +12,7 @@ struct UnitCell{G<:AbstractUnitCellGeometry,ElType,A} <: AbstractUnitCell{G,ElTy
     UnitCell{G}(data::CircularArray{T,2,A}) where {G,T,A} = new{G,T,A}(data)
 end
 
-@inline getdata(uc::UnitCell{G,T,A}) where {G,T,A} = uc.data::CircularArray{T,2, A}
+@inline getdata(uc::UnitCell{G,T,A}) where {G,T,A} = uc.data::CircularArray{T,2,A}
 
 @inline datatype(U::Type{<:AbstractUnitCell{G,ElType,A}}) where {G,ElType,A} = A
 @inline datatype(U::Type) = U
@@ -24,39 +25,41 @@ end
 
 ## SIMILAR
 
-@inline Base.similar(uc::AbstractUnitCell{G,T}) where {G,T} = UnitCell{G}(similar(getdata(uc)))
+@inline function Base.similar(uc::AbstractUnitCell{G,T}) where {G,T}
+    return UnitCell{G}(similar(getdata(uc)))
+end
 @inline function Base.similar(uc::AbstractUnitCell{G,T}, ::Type{S}) where {G,S,T}
     return UnitCell{G}(similar(getdata(uc), S))
 end
 @inline function Base.similar(uc::AbstractUnitCell{G,T}, dims::Dims) where {T,G}
     return UnitCell{G}(similar(getdata(uc), dims))
 end
-@inline function Base.similar(uc::AbstractUnitCell{G,T}, ::Type{S}, dims::Dims) where {T,S,G}
+@inline function Base.similar(
+    uc::AbstractUnitCell{G,T}, ::Type{S}, dims::Dims
+) where {T,S,G}
     return UnitCell{G}(similar(getdata(uc), S, dims))
 end
-
 
 ## BROADCASTING
 
 # Pass in the `BroadcastStyle` such that we can get compute the winning broadcast style
 # of the underlying abstract matrix.
 
-abstract type AbstractUnitCellStyle{G,A<:Base.BroadcastStyle} <: Broadcast.AbstractArrayStyle{2} end
+abstract type AbstractUnitCellStyle{G,A<:Base.BroadcastStyle} <:
+              Broadcast.AbstractArrayStyle{2} end
 
 struct UnitCellStyle{G,A} <: AbstractUnitCellStyle{G,A} end
 
 (T::Type{<:AbstractUnitCellStyle})(::Val{2}) = T()
 (T::Type{<:AbstractUnitCellStyle})(::Val{N}) where {N} = Broadcast.DefaultArrayStyle{N}()
 
-
 @inline function Base.BroadcastStyle(::Type{UnitCell{G,ElType,A}}) where {G,ElType,A}
-    return UnitCellStyle{G, typeof(Base.BroadcastStyle(A))}()
+    return UnitCellStyle{G,typeof(Base.BroadcastStyle(A))}()
 end
 
-
 @inline function Base.BroadcastStyle(
-    ::UnitCellStyle{G,A}, ::Broadcast.ArrayStyle{<:CircularArray{ElType, 2, B}}
-) where {G,ElType, A,B}
+    ::UnitCellStyle{G,A}, ::Broadcast.ArrayStyle{<:CircularArray{ElType,2,B}}
+) where {G,ElType,A,B}
     AB = Base.BroadcastStyle(A(), Base.BroadcastStyle(B))
     return UnitCellStyle{G,typeof(AB)}()
 end
@@ -64,10 +67,7 @@ end
 @inline function Base.similar(
     bc::Broadcast.Broadcasted{UnitCellStyle{G,A}}, ::Type{ElType}
 ) where {G,A,ElType}
-
-    return UnitCell{G}(
-        similar(Base.convert(Broadcast.Broadcasted{A}, bc), ElType)
-    )
+    return UnitCell{G}(similar(Base.convert(Broadcast.Broadcasted{A}, bc), ElType))
 end
 
 ## CONSTRUCTORS
@@ -88,7 +88,7 @@ UnitCell{G}(data) where {G} = UnitCell{G}(tocircular(data))
     return UnitCell(view(getdata(uc), new_inds...))
 end
 
-const SubUnitCell{G,T,A<:SubArray} = UnitCell{G, T, A}
+const SubUnitCell{G,T,A<:SubArray} = UnitCell{G,T,A}
 
 _unitrange(i::Int) = UnitRange(i, i)
 _unitrange(x) = x
@@ -108,4 +108,4 @@ end
 ## TENSORS
 
 TensorKit.spacetype(::AbstractUnitCell{G,<:AbstractTensorMap{S}}) where {G,S} = S
-numbertype(::AbstractUnitCell{G,T}) where {G,T} = eltype(T)
+numbertype(::AbstractUnitCell{G,T}) where {G,T<:AbstractTensorMap} = eltype(T)

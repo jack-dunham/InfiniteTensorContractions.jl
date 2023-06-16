@@ -16,73 +16,71 @@ function similarboundary(
 end
 
 """
-    BoundaryState{Alg, BuType, BoType} <: AbstractBoundaryState{B}
+    BoundaryState{Alg, NType, T} <: AbstractBoundaryState{B}
 
 A struct representing the state of a boundary algorithm of type `Alg` used to contract a network of 
-type `BuType` using boundary tensors of type `BoType`. Note, avoid constructing this object directly,
+type `NType` using boundary tensors of type `T`. Note, avoid constructing this object directly,
 instead use function `initialize`.
 
 # Fields
-- `tensors::BoType <: AbstractBoundaryTensors`: the tensors that compose the boundary
-- `network::BuType <: AbstractNetwork`: the network of tensors to be contracted
+- `tensors::T <: AbstractBoundaryTensors`: the tensors that compose the boundary
+- `network::NType <: AbstractNetwork`: the network of tensors to be contracted
 - `alg::Alg`: the contraction algorithm to be used
 - `info::ConvergenceInfo`: information about the covergence progress of the algorithm
 - `outfile::String`: file to write data to
 """
 struct BoundaryState{
-    Alg<:AbstractBoundaryAlgorithm,
-    BuType<:AbstractContractableTensors,
-    BoType<:AbstractBoundaryTensors,
+    Alg<:AbstractBoundaryAlgorithm,NType<:AbstractNetwork,T<:AbstractBoundaryTensors
 } <: AbstractBoundaryState{Alg}
-    tensors::BoType
-    bulk::BuType
+    tensors::T
+    network::NType
     alg::Alg
     info::ConvergenceInfo
     outfile::String
     prestep::Function
     poststep::Function
-    initial_tensors::BoType
+    initial_tensors::T
     function BoundaryState(
-        tensors::BoType,
-        bulk::BuType,
+        tensors::T,
+        network::NType,
         alg::Alg,
         info::ConvergenceInfo,
         outfile::String,
         prestep::Function,
         poststep::Function,
-        initial_tensors::BoType,
-    ) where {BoType,BuType,Alg}
+        initial_tensors::T,
+    ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
-        return new{Alg,BuType,BoType}(
-            tensors, bulk, alg, info, outfile, prestep, poststep, initial_tensors
+        return new{Alg,NType,T}(
+            tensors, network, alg, info, outfile, prestep, poststep, initial_tensors
         )
     end
     function BoundaryState(
-        tensors::BoType,
-        bulk::BuType,
+        tensors::T,
+        network::NType,
         alg::Alg,
         info::ConvergenceInfo,
         outfile::String,
         prestep::Function,
         poststep::Function,
-    ) where {BoType,BuType,Alg}
+    ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
-        return new{Alg,BuType,BoType}(tensors, bulk, alg, info, outfile, prestep, poststep)
+        return new{Alg,NType,T}(tensors, network, alg, info, outfile, prestep, poststep)
     end
 end
 
 function boundary_verify(tensors, alg)
     btype = contraction_boundary_type(tensors)
-    if !(btype == typeof(alg))
-        throw(ArgumentError("Incompatible type of boundary for algorithm provided"))
+    if !(typeof(alg) <: btype)
+        throw(ArgumentError("Incompatible algorithm for type of boundary"))
     end
     return nothing
 end
 
 function initialize(
-    bulk,
+    network,
     alg,
-    initial_tensors=inittensors(rand, bulk, alg);
+    initial_tensors=inittensors(rand, network, alg);
     store_initial=true,
     outfile="",
     prestep=identity,
@@ -92,10 +90,12 @@ function initialize(
     if store_initial
         initial_copy = deepcopy(initial_tensors)
         return BoundaryState(
-            initial_tensors, bulk, alg, info, outfile, prestep, poststep, initial_copy
+            initial_tensors, network, alg, info, outfile, prestep, poststep, initial_copy
         )
     else
-        return BoundaryState(initial_tensors, bulk, alg, info, outfile, prestep, poststep)
+        return BoundaryState(
+            initial_tensors, network, alg, info, outfile, prestep, poststep
+        )
     end
 end
 
@@ -113,14 +113,14 @@ function run!(state::AbstractBoundaryState)
     tol = alg.tol
 
     # Remove any wrappers, converting tensors to appropriate forms.
-    bulk = detrace(state.bulk)
+    network = detrace(state.network)
 
     args = start(state)
 
     while info.iterations < maxiter && info.error ≥ tol
         prestep(state, args...)
 
-        info.error = step!(state.tensors, bulk, alg, args...)
+        info.error = step!(state.tensors, network, alg, args...)
 
         info.iterations += 1
 
@@ -143,9 +143,9 @@ detrace(x) = x
 function similarboundary(
     ::Type{Alg}, state::AbstractBoundaryState
 ) where {Alg<:AbstractBoundaryTensors}
-    bulk = state.bulk
+    network = state.network
     new_alg = similarboundary(Alg, state.alg)
-    new_state = initialize(bulk, new_alg)
+    new_state = initialize(network, new_alg)
     return new_state
 end
 

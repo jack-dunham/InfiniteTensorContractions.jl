@@ -8,7 +8,7 @@ using KrylovKit
 import Base: @kwdef
 
 export Square
-export UnitCell, ContractableTensors
+export UnitCell, Network
 
 export VUMPS, CTMRG
 export initialize, calculate!, calculate, contract
@@ -19,7 +19,7 @@ include("utils.jl")
 
 include("abstractunitcell.jl")
 include("abstractcontraction.jl")
-include("contractabletensors.jl")
+include("abstractnetwork.jl")
 
 include("boundaries/abstractboundary.jl")
 
@@ -41,6 +41,7 @@ include("boundaries/ctmrg/tensormacros.jl")
 
 function __init__()
     ENV["ITC_ALWAYS_FORCE"] = false
+    return nothing
 end
 
 end # module

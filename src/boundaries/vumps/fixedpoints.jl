@@ -11,7 +11,7 @@ struct FixedPoints{A<:AbUnCe{<:TenAbs{2}}} <: AbstractFixedPoints
     end
 end
 
-FixedPoints(f, mps::MPS, bulk) = initfixedpoints(f, mps, bulk)
+FixedPoints(f, mps::MPS, network::AbstractNetwork) = initfixedpoints(f, mps, network)
 
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
@@ -24,36 +24,38 @@ function get_truncmetric_tensors(fp::FixedPoints, bond::Bond)
 end
 =#
 
-function initfixedpoints(f, mps::MPS, bulk)
+function initfixedpoints(f, mps::MPS, network::AbstractNetwork)
     mps_tensor = getcentral(mps)
-    bulk_tensor = convert.(TensorMap, bulk)
-    left = _initfixedpoints.(f, mps_tensor, bulk_tensor, :left)
-    right = _initfixedpoints.(f, mps_tensor, bulk_tensor, :right)
+    # network_tensor = convert.(TensorMap, network)
+    left = _initfixedpoints.(f, mps_tensor, network, :left)
+    right = _initfixedpoints.(f, mps_tensor, network, :right)
     return FixedPoints(left, right)
 end
 
 function _initfixedpoints(
-    f, mps::AbstractTensorMap{S}, bulk::AbstractTensorMap{S}, leftright::Symbol
+    f, mps::AbstractTensorMap{S}, network, leftright::Symbol
 ) where {S}
-    T = promote_type(eltype(mps), eltype(bulk))
+    T = promote_type(eltype(mps), numbertype(network))
 
-    cod = fixedpoint_codomain(bulk, leftright)
+    cod = fixedpoint_codomain(network, leftright)
     dom = fixedpoint_domain(mps, leftright)
 
     return TensorMap(f, T, cod, dom)
 end
 
-function fixedpoint_codomain(bulk, leftright::Symbol)
+function fixedpoint_codomain(network, leftright::Symbol)
     if leftright === :left
-        return _fixedpoint_codomain(bulk, 3)
+        return _fixedpoint_codomain(network, 3)
     elseif leftright === :right
-        return _fixedpoint_codomain(bulk, 1)
+        return _fixedpoint_codomain(network, 1)
     else
         throw(ArgumentError(""))
     end
 end
-_fixedpoint_codomain(bulk::AbsTen{0,4}, lr::Int) = domain(bulk)[lr]
-_fixedpoint_codomain(bulk::AbsTen{2,4}, lr::Int) = domain(bulk)[lr] * domain(bulk)[lr]'
+_fixedpoint_codomain(network_tensor::AbsTen{0,4}, lr::Int) = domain(network_tensor)[lr]
+function _fixedpoint_codomain(network_tensor::TensorPair, lr::Int)
+    return domain(network_tensor.top)[lr] * domain(network_tensor.bot)[lr]'
+end
 
 function fixedpoint_domain(mps_tensor, leftright::Symbol)
     if leftright === :left
@@ -91,17 +93,21 @@ function hcapply!(
     return hc
 end
 
-function fixedpoints(mps::MPS, bulk)
-    initial_fpoints = FixedPoints(rand, mps, bulk)
-    return fixedpoints!(initial_fpoints, mps, bulk)
+function fixedpoints(mps::MPS, network)
+    initial_fpoints = FixedPoints(rand, mps, network)
+    return fixedpoints!(initial_fpoints, mps, network)
 end
 
 #this is now the correct env func
 
-function fixedpoints!(fpoints::FixedPoints, mps::MPS, bulk)
+function fixedpoints!(fpoints::FixedPoints, mps::MPS, network)
     AL, C, AR, _ = unpack(mps)
-    tm_left = TransferMatrix.(AL, bulk, circshift(AL, (0, -1)))
-    tm_right = TransferMatrix.(AR, bulk, circshift(AR, (0, -1)))
+
+
+    TransferMatrix(AL[1,1], network[1,1], AL[1,1])
+
+    tm_left = TransferMatrix.(AL, network, circshift(AL, (0, -1)))
+    tm_right = TransferMatrix.(AR, network, circshift(AR, (0, -1)))
 
     return fixedpoints!(fpoints, tm_left, tm_right, C)
 end
@@ -135,10 +141,10 @@ function fixedpoints!(
         for x in 2:Nx
             # FL[x, y] =
             #     FL[x - 1, y] * TransferMatrix(AL[x - 1, y], M[x - 1, y], AL[x - 1, y + 1])#works
-            multransfer!(FL[x, y], FL[x-1, y], tm_left[x-1, y])
+            multransfer!(FL[x, y], FL[x - 1, y], tm_left[x - 1, y])
         end
 
-        NN = renorm(C[Nx, y+1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
+        NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
 
         NN = sqrt(NN)
 
@@ -146,20 +152,20 @@ function fixedpoints!(
         rmul!(FL[1, y], 1 / NN) #correct NN
         rmul!(FR[end, y], 1 / NN) #correct NN
 
-        for x in (Nx-1):-1:1
+        for x in (Nx - 1):-1:1
             # FR[x, y] =
             #     TransferMatrix(AR[x + 1, y], M[x + 1, y], AR[x + 1, y + 1]) * FR[x + 1, y]#works
-            multransfer!(FR[x, y], tm_right[x+1, y], FR[x+1, y])
+            multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
 
-            NN = renorm(C[x, y+1], C[x, y], FL[x+1, y], FR[x, y])
+            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
 
             rmul!(FR[x, y], 1 / sqrt(NN))
-            rmul!(FL[x+1, y], 1 / sqrt(NN))
+            rmul!(FL[x + 1, y], 1 / sqrt(NN))
         end
 
         # First x seems to be normalized, but not second x
         for x in 1:Nx
-            NN = renorm(C[x, y+1], C[x, y], FL[x+1, y], FR[x, y])
+            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
             # @warn "NN: $((x,y)),  $NN"
             # rmul!(FR[x, y], 1 / (NN))
             # rmul!(FL[x + 1, y], 1 / (NN))
@@ -223,7 +229,7 @@ function flsolve(
     flu = similar(fl)
     @tensoropt begin
         flu[8; 6 7] =
-            fl[3; 1 2] * (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y+1]')[8; 3 5]
+            fl[3; 1 2] * (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5]
     end
     return flu
 end
@@ -241,10 +247,10 @@ function flsolve(
             fl[3; 1 2] *
             (a[x, y])[1 4; 6] *
             (m[x, y])[2 5; 7 4] *
-            (a[x, y+1]')[8; 3 5] *
-            (a[x+1, y])[6 9; 11] *
-            (m[x+1, y])[7 10; 12 9] *
-            (a[x+1, y+1]')[13; 8 10]
+            (a[x, y + 1]')[8; 3 5] *
+            (a[x + 1, y])[6 9; 11] *
+            (m[x + 1, y])[7 10; 12 9] *
+            (a[x + 1, y + 1]')[13; 8 10]
     end
     return flu
 end
@@ -263,13 +269,13 @@ function flsolve(
             fl[3; 1 2] *
             (a[x, y])[1 4; 6] *
             (m[x, y])[2 5; 7 4] *
-            (a[x, y+1]')[8; 3 5] *
-            (a[x+1, y])[6 9; 11] *
-            (m[x+1, y])[7 10; 12 9] *
-            (a[x+1, y+1]')[13; 8 10] *
-            (a[x+2, y])[11 14; 16] *
-            (m[x+2, y])[12 15; 17 14] *
-            (a[x+2, y+1]')[18; 13 15]
+            (a[x, y + 1]')[8; 3 5] *
+            (a[x + 1, y])[6 9; 11] *
+            (m[x + 1, y])[7 10; 12 9] *
+            (a[x + 1, y + 1]')[13; 8 10] *
+            (a[x + 2, y])[11 14; 16] *
+            (m[x + 2, y])[12 15; 17 14] *
+            (a[x + 2, y + 1]')[18; 13 15]
     end
     return flu
 end
@@ -286,7 +292,7 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y+1]')[8; 3 5] * fr[6 7; 8]
+            (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5] * fr[6 7; 8]
     end
     return fru
 end
@@ -301,12 +307,12 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x-1, y])[1 4; 6] *
-            (m[x-1, y])[2 5; 7 4] *
-            (a[x-1, y+1]')[8; 3 5] *
+            (a[x - 1, y])[1 4; 6] *
+            (m[x - 1, y])[2 5; 7 4] *
+            (a[x - 1, y + 1]')[8; 3 5] *
             (a[x, y])[6 9; 11] *
             (m[x, y])[7 10; 12 9] *
-            (a[x, y+1]')[13; 8 10] *
+            (a[x, y + 1]')[13; 8 10] *
             fr[11 12; 13]
     end
     return fru
@@ -322,15 +328,15 @@ function frsolve(
     fru = similar(fr)
     @tensoropt begin
         fru[1 2; 3] =
-            (a[x-2, y])[1 4; 6] *
-            (m[x-2, y])[2 5; 7 4] *
-            (a[x-2, y+1]')[8; 3 5] *
-            (a[x-1, y])[6 9; 11] *
-            (m[x-1, y])[7 10; 12 9] *
-            (a[x-1, y+1]')[13; 8 10] *
+            (a[x - 2, y])[1 4; 6] *
+            (m[x - 2, y])[2 5; 7 4] *
+            (a[x - 2, y + 1]')[8; 3 5] *
+            (a[x - 1, y])[6 9; 11] *
+            (m[x - 1, y])[7 10; 12 9] *
+            (a[x - 1, y + 1]')[13; 8 10] *
             (a[x, y])[11 14; 16] *
             (m[x, y])[12 15; 17 14] *
-            (a[x, y+1]')[18; 13 15] *
+            (a[x, y + 1]')[18; 13 15] *
             fr[16 17; 18]
     end
     return fru
