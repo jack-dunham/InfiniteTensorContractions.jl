@@ -31,12 +31,10 @@ end
 ## SINGLE LAYER
 
 function _projectedge!(
-    t_dst::T,
-    t_src::T, 
-    m:M, 
-    u::UV, 
-    v::UV
-) where {S,T<:AbstractTensorMap{S,1,2}, M<:AbstractTensorMap{0,4}, UV<:AbstractTensorMap{2,1}}
+    t_dst::T, t_src::T, m::M, u::UV, v::UV
+) where {
+    S,T<:AbstractTensorMap{S,1,2},M<:AbstractTensorMap{S,0,4},UV<:AbstractTensorMap{S,2,1}
+}
     @tensoropt t_dst[h0; v0_d v0_u] =
         t_src[h1; v3 v1] * m[h0 v4 h1 v2] * u[v1 v2; v0_u] * v[v3 v4; v0_d]
     return t_dst
@@ -45,23 +43,18 @@ end
 ## DOUBLE LAYER
 
 function _projectedge!(
-    t_dst::T,
-    t_src::T,
-    ma::M,
-    u::UV, 
-    v::UV,
-)where {S,N,T<:AbstractTensorMap{S,2,2}, M<:AbstractTensorMap{N,4}, UV<:AbstractTensorMap{3,1}}
+    t_dst::T, t_src::T, ma::M, u::UV, v::UV
+) where {
+    S,N,T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,N,4},UV<:AbstractTensorMap{S,3,1}
+}
     return _projectedge!(t_dst, t_src, ma, ma, u, v)
 end
 
 function _projectedge!(
-    t_dst::T,
-    t_src::T,
-    ma::M,
-    mb::M,
-    u::UV, 
-    v::UV,
-) where {S,T<:AbstractTensorMap{S,2,2}, M<:AbstractTensorMap{1,4}, UV<:AbstractTensorMap{3,1}}
+    t_dst::T, t_src::T, ma::M, mb::M, u::UV, v::UV
+) where {
+    S,T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,1,4},UV<:AbstractTensorMap{S,3,1}
+}
     @tensoropt (
         k => 2,
         D1 => D,
@@ -78,8 +71,8 @@ function _projectedge!(
         x4 => D,
     ) t_dst[D1 D5; x4 x2] =
         t_src[D3 D7; x3 x1] *
-        ma[k ; D1 D2 D3 D4] *
-        (mb')[D5 D6 D7 D8; k ] *
+        ma[k; D1 D2 D3 D4] *
+        (mb')[D5 D6 D7 D8; k] *
         u[x1 D4 D8; x2] *
         v[x3 D2 D6; x4]
 
@@ -87,13 +80,10 @@ function _projectedge!(
 end
 
 function _projectedge!(
-    t_dst::T,
-    t_src::T,
-    ma::M,
-    mb::M,
-    u::UV, 
-    v::UV,
-) where {S,T<:AbstractTensorMap{S,2,2}, M<:AbstractTensorMap{2,4}, UV<:AbstractTensorMap{3,1}}
+    t_dst::T, t_src::T, ma::M, mb::M, u::UV, v::UV
+) where {
+    S,T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,2,4},UV<:AbstractTensorMap{S,3,1}
+}
     @tensoropt (
         k => 2,
         b => 2,
@@ -123,15 +113,10 @@ end
 
 # O(χ^2 D^8) or D^10
 function halfcontract(
-    C1_00::C, 
-    T1_10::T,
-    T1_20::T, 
-    C2_30::C, 
-    T4_01::T, 
-    M_11::M, 
-    M_21::M, 
-    T2_31::T
-) where {S, C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,1,2}, M<:AbstractTensorMap{S,0,4}}
+    C1_00::C, T1_10::T, T1_20::T, C2_30::C, T4_01::T, M_11::M, M_21::M, T2_31::T
+) where {
+    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,1,2},M<:AbstractTensorMap{S,0,4}
+}
     @tensoropt out[v8 v7; v5 v6] :=
         C1_00[h1 v1] *
         T1_10[v2; h2 h1] *
@@ -148,16 +133,13 @@ end
 ## DOUBLE LAYER METHODS
 
 function halfcontract(
-    C1_00::C,
-    T1_10::T,
-    T1_20::T,
-    C2_30::C,
-    T4_01::T,
-    M_11a::M
-    M_21a::M,
-    T2_31::T,
-) where {S, N, C<:AbstractTensorMap{S,1,1}, T<:AbstractTensorMap{S,2,2}, M<:AbstractTensorMap{S,N,4}}
-    return halfcontract(C1_00, T1_10,T1_20,C2_30,T4_01,M_11a,M_11a, M_21a, M_21a, T2_31)
+    C1_00::C, T1_10::T, T1_20::T, C2_30::C, T4_01::T, M_11a::M, M_21a::M, T2_31::T
+) where {
+    S,N,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,N,4}
+}
+    return halfcontract(
+        C1_00, T1_10, T1_20, C2_30, T4_01, M_11a, M_11a, M_21a, M_21a, T2_31
+    )
 end
 
 function halfcontract(
@@ -166,12 +148,14 @@ function halfcontract(
     T1_20::T,
     C2_30::C,
     T4_01::T,
-    M_11a::M
+    M_11a::M,
     M_11b::M,
     M_21a::M,
     M_21b::M,
     T2_31::T,
-) where {S, C<:AbstractTensorMap{S,1,1}, T<:AbstractTensorMap{S,2,2}, M<:AbsTen{1,4}}
+) where {
+    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,1,4}
+}
     @tensoropt (
         k1 => 2,
         k2 => 2,
@@ -197,10 +181,10 @@ function halfcontract(
         x6 => D,
         x7 => D,
     ) top[x7 D6 E6; x6 D2 E2] :=
-        M_11a[k1 ; D1 D2 D3 D4] *
-        M_21a[k2 ; D5 D6 D1 D8] *
-        (M_11b)'[E1 E2 E3 E4; k1 ] *
-        (M_21b)'[E5 E6 E1 E8; k2 ] *
+        M_11a[k1; D1 D2 D3 D4] *
+        M_21a[k2; D5 D6 D1 D8] *
+        (M_11b)'[E1 E2 E3 E4; k1] *
+        (M_21b)'[E5 E6 E1 E8; k2] *
         C1_00[x1 x4] *
         T1_10[D4 E4; x2 x1] *
         T1_20[D8 E8; x3 x2] *
@@ -217,12 +201,14 @@ function halfcontract(
     T1_20::T,
     C2_30::C,
     T4_01::T,
-    M_11a::M
+    M_11a::M,
     M_11b::M,
     M_21a::M,
     M_21b::M,
     T2_31::T,
-) where {S, C<:AbstractTensorMap{S,1,1}, T<:AbstractTensorMap{S,2,2}, M<:AbsTen{2,4}}
+) where {
+    S,C<:AbstractTensorMap{S,1,1},T<:AbstractTensorMap{S,2,2},M<:AbstractTensorMap{S,2,4}
+}
     @tensoropt (
         k1 => 2,
         k2 => 2,
