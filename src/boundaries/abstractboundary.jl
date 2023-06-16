@@ -36,7 +36,6 @@ struct BoundaryState{
     network::NType
     alg::Alg
     info::ConvergenceInfo
-    outfile::String
     prestep::Function
     poststep::Function
     initial_tensors::T
@@ -45,14 +44,13 @@ struct BoundaryState{
         network::NType,
         alg::Alg,
         info::ConvergenceInfo,
-        outfile::String,
         prestep::Function,
         poststep::Function,
         initial_tensors::T,
     ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
         return new{Alg,NType,T}(
-            tensors, network, alg, info, outfile, prestep, poststep, initial_tensors
+            tensors, network, alg, info, prestep, poststep, initial_tensors
         )
     end
     function BoundaryState(
@@ -60,12 +58,11 @@ struct BoundaryState{
         network::NType,
         alg::Alg,
         info::ConvergenceInfo,
-        outfile::String,
         prestep::Function,
         poststep::Function,
     ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
-        return new{Alg,NType,T}(tensors, network, alg, info, outfile, prestep, poststep)
+        return new{Alg,NType,T}(tensors, network, alg, info, prestep, poststep)
     end
 end
 
@@ -78,24 +75,24 @@ function boundary_verify(tensors, alg)
 end
 
 function initialize(
-    network,
+    network::AbstractUnitCell,
     alg,
     initial_tensors=inittensors(rand, network, alg);
     store_initial=true,
-    outfile="",
     prestep=identity,
     poststep=identity,
 )
     info = ConvergenceInfo()
+
+    network = convert(Network, network)
+
     if store_initial
         initial_copy = deepcopy(initial_tensors)
         return BoundaryState(
-            initial_tensors, network, alg, info, outfile, prestep, poststep, initial_copy
+            initial_tensors, network, alg, info, prestep, poststep, initial_copy
         )
     else
-        return BoundaryState(
-            initial_tensors, network, alg, info, outfile, prestep, poststep
-        )
+        return BoundaryState(initial_tensors, network, alg, info, prestep, poststep)
     end
 end
 
@@ -113,7 +110,7 @@ function run!(state::AbstractBoundaryState)
     tol = alg.tol
 
     # Remove any wrappers, converting tensors to appropriate forms.
-    network = detrace(state.network)
+    network = ensure_contractable(state.network)
 
     args = start(state)
 
@@ -137,8 +134,6 @@ function run!(state::AbstractBoundaryState)
 end
 
 Base.identity(x::AbstractBoundaryState, args...; kwargs...) = x
-
-detrace(x) = x
 
 function similarboundary(
     ::Type{Alg}, state::AbstractBoundaryState

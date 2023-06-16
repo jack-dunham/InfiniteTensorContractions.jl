@@ -27,7 +27,6 @@ numbertype(t::TensorPair) = eltype(t)
 
 ContractableTrait(t::Type{TensorPair}) = ContractableTrait(tensortype(t))
 
-
 """
     Network{G,ElType<:AbstractTensorMap,A,...}
 """
@@ -42,6 +41,8 @@ Network(t1::AbstractMatrix, t2::AbstractMatrix) = Network(TensorPair.(t1, t2))
 
 Network(data) = Network{Square}(data)
 Network{G}(data) where {G} = Network(UnitCell{G}(data))
+
+Base.convert(::Type{Network}, uc::AbstractUnitCell) = Network(uc)
 
 struct NetworkStyle{G,A} <: AbstractUnitCellStyle{G,A} end
 
@@ -134,6 +135,4 @@ west(t) = bondspace(t)[3]
 north(t) = bondspace(t)[4]
 
 
-
-
-
+ensure_contractable(x) = x
