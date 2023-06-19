@@ -9,12 +9,14 @@ import Base: @kwdef
 
 export AbstractUnitCellGeometry
 export AbstractUnitCell
+export AbstractNetwork
 
 export AbstractContractionAlgorithm, AbstractContractionState, AbstractContractionTensors
 export AbstractBoundaryAlgorithm, AbstractBoundaryState, AbstractBoundaryTensors
 
 export Square
-export UnitCell, Network
+export UnitCell 
+export Network, TensorPair, bondspace, swapaxes, invertaxes
 
 export VUMPS, CTMRG
 export BoundaryState
