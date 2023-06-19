@@ -7,10 +7,20 @@ using KrylovKit
 
 import Base: @kwdef
 
+export AbstractUnitCellGeometry
+export AbstractUnitCell
+
+export AbstractContractionAlgorithm, AbstractContractionState, AbstractContractionTensors
+export AbstractBoundaryAlgorithm, AbstractBoundaryState, AbstractBoundaryTensors
+
 export Square
 export UnitCell, Network
 
 export VUMPS, CTMRG
+export BoundaryState
+export VUMPSTensors, MPS, FixedPoints
+export CTMRGTensors, Corners, Edges, corners, edges
+
 export initialize, calculate!, calculate, contract
 
 # No deps
