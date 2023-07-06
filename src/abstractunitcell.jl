@@ -25,17 +25,17 @@ end
 
 ## SIMILAR
 
-@inline function Base.similar(uc::AbstractUnitCell{G,T}) where {G,T}
+@inline function Base.similar(uc::UnitCell{G,T}) where {G,T}
     return UnitCell{G}(similar(getdata(uc)))
 end
-@inline function Base.similar(uc::AbstractUnitCell{G,T}, ::Type{S}) where {G,S,T}
+@inline function Base.similar(uc::UnitCell{G,T}, ::Type{S}) where {G,S,T}
     return UnitCell{G}(similar(getdata(uc), S))
 end
-@inline function Base.similar(uc::AbstractUnitCell{G,T}, dims::Dims) where {T,G}
+@inline function Base.similar(uc::UnitCell{G,T}, dims::Dims) where {T,G}
     return UnitCell{G}(similar(getdata(uc), dims))
 end
 @inline function Base.similar(
-    uc::AbstractUnitCell{G,T}, ::Type{S}, dims::Dims
+    uc::UnitCell{G,T}, ::Type{S}, dims::Dims
 ) where {T,S,G}
     return UnitCell{G}(similar(getdata(uc), S, dims))
 end
