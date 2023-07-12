@@ -1,4 +1,5 @@
 module InfiniteTensorContractions
+const ITC = InfiniteTensorContractions
 
 using CircularArrays
 using LinearAlgebra
@@ -6,6 +7,8 @@ using TensorKit
 using KrylovKit
 
 import Base: @kwdef
+
+export ITC
 
 export AbstractUnitCellGeometry
 export AbstractUnitCell
@@ -15,7 +18,7 @@ export AbstractBoundaryAlgorithm, AbstractBoundaryState, AbstractBoundaryTensors
 
 export Square
 export UnitCell
-export Network, TensorPair, bondspace, swapaxes, invertaxes
+export TensorPair, bondspace, swapaxes, invertaxes
 
 export VUMPS, CTMRG
 export BoundaryState
