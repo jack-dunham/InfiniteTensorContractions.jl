@@ -9,13 +9,12 @@ import Base: @kwdef
 
 export AbstractUnitCellGeometry
 export AbstractUnitCell
-export AbstractNetwork
 
 export AbstractContractionAlgorithm, AbstractContractionState, AbstractContractionTensors
 export AbstractBoundaryAlgorithm, AbstractBoundaryState, AbstractBoundaryTensors
 
 export Square
-export UnitCell 
+export UnitCell
 export Network, TensorPair, bondspace, swapaxes, invertaxes
 
 export VUMPS, CTMRG
@@ -31,7 +30,7 @@ include("utils.jl")
 
 include("abstractunitcell.jl")
 include("abstractcontraction.jl")
-include("abstractnetwork.jl")
+include("networks.jl")
 
 include("boundaries/abstractboundary.jl")
 

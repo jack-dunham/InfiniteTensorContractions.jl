@@ -1,8 +1,9 @@
-abstract type AbstractNetwork{G,ElType,A} <: AbstractUnitCell{G,ElType,A} end
-
 abstract type ContractableTrait end
 struct IsContractable <: ContractableTrait end
 struct NotContractable <: ContractableTrait end
+
+const AbstractNetwork{G,ElType<:AbstractTensorMap,A} = AbstractUnitCell{G,ElType,A}
+const AbstractSingleLayerNetwork{G,ElType<:TensorMap,A} = AbstractUnitCell{G,ElType,A}
 
 ContractableTrait(::Type{<:AbsTen{0,4}}) = IsContractable()
 ContractableTrait(::Type{<:AbsTen{1,4}}) = IsContractable()
@@ -13,6 +14,8 @@ struct TensorPair{S,N₁,N₂,T<:AbstractTensorMap{S,N₁,N₂}} <: AbstractTens
     top::T
     bot::T
 end
+
+const AbstractDoubleLayerNetwork{G,ElType<:TensorPair,A} = AbstractUnitCell{G,ElType,A}
 
 top(tp::TensorPair) = tp.top
 bot(tp::TensorPair) = tp.bot
@@ -27,59 +30,10 @@ numbertype(t::TensorPair) = eltype(t)
 
 ContractableTrait(t::Type{TensorPair}) = ContractableTrait(tensortype(t))
 
-"""
-    Network{G,ElType<:AbstractTensorMap,A,...}
-"""
-struct Network{G,ElType<:AbstractTensorMap,A,U<:AbstractUnitCell{G,ElType,A}} <:
-       AbstractNetwork{G,ElType,A}
-    data::U
-end
-
-@inline getdata(network::AbstractNetwork) = network.data
-
-Network(t1::AbstractMatrix, t2::AbstractMatrix) = Network(TensorPair.(t1, t2))
-
-Network(data) = Network{Square}(data)
-Network{G}(data) where {G} = Network(UnitCell{G}(data))
-
-Base.convert(::Type{Network}, uc::AbstractUnitCell) = Network(uc)
-
-struct NetworkStyle{G,A} <: AbstractUnitCellStyle{G,A} end
-
-@inline function Base.BroadcastStyle(
-    ::Type{<:AbstractNetwork{G,ElType,A}}
-) where {G,ElType,A}
-    return NetworkStyle{G,typeof(Base.BroadcastStyle(A))}()
-end
-@inline function Base.BroadcastStyle(
-    ::NetworkStyle{G,A}, ::AbstractUnitCellStyle{G,B}
-) where {G,A,B}
-    return NetworkStyle{G,typeof(Base.BroadcastStyle(A(), B()))}()
-end
-
-@inline function Base.similar(
-    bc::Broadcast.Broadcasted{NetworkStyle{G,A}}, ::Type{ElType}
-) where {G,A,ElType}
-    return _similar(ContractableTrait(ElType), bc, ElType)
-end
-
-@inline function _similar(
-    ::IsContractable, bc::Broadcast.Broadcasted{NetworkStyle{G,A}}, ::Type{ElType}
-) where {G,A,ElType}
-    return Network{G}(similar(Base.convert(Broadcast.Broadcasted{A}, bc), ElType))
-end
-@inline function _similar(
-    ::NotContractable, bc::Broadcast.Broadcasted{NetworkStyle{G,A}}, ::Type{ElType}
-) where {G,A,ElType}
-    return similar(Base.convert(Broadcast.Broadcasted{UnitCellStyle{G,A}}, bc), ElType)
-end
-
-# ContractableTensors{G,T,A}(data::A) where {G,T,A<:AbstractMatrix{T}} = ContractableTensors{G}(data)
-
 ## Implement functions for contractable tensors etc
 ## ContractableTensors need a notion of an east, south, west, north bonds
 
-function bondspace(network::AbstractNetwork)
+function bondspace(network::AbstractUnitCell)
     out = tuple((getindex.(bondspace.(network), i) for i in 1:4)...)
     return out
 end
@@ -133,6 +87,5 @@ east(t) = bondspace(t)[1]
 south(t) = bondspace(t)[2]
 west(t) = bondspace(t)[3]
 north(t) = bondspace(t)[4]
-
 
 ensure_contractable(x) = x

@@ -84,8 +84,6 @@ function initialize(
 )
     info = ConvergenceInfo()
 
-    network = convert(Network, network)
-
     if store_initial
         initial_copy = deepcopy(initial_tensors)
         return BoundaryState(
