@@ -35,33 +35,24 @@ struct BoundaryState{
     network::NType
     alg::Alg
     info::ConvergenceInfo
-    prestep::Function
-    poststep::Function
+    callback::Function
     initial_tensors::T
     function BoundaryState(
         tensors::T,
         network::NType,
         alg::Alg,
         info::ConvergenceInfo,
-        prestep::Function,
-        poststep::Function,
+        callback::Function,
         initial_tensors::T,
     ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
-        return new{Alg,NType,T}(
-            tensors, network, alg, info, prestep, poststep, initial_tensors
-        )
+        return new{Alg,NType,T}(tensors, network, alg, info, callback, initial_tensors)
     end
     function BoundaryState(
-        tensors::T,
-        network::NType,
-        alg::Alg,
-        info::ConvergenceInfo,
-        prestep::Function,
-        poststep::Function,
+        tensors::T, network::NType, alg::Alg, info::ConvergenceInfo, callback::Function
     ) where {T,NType,Alg}
         boundary_verify(tensors, alg)
-        return new{Alg,NType,T}(tensors, network, alg, info, prestep, poststep)
+        return new{Alg,NType,T}(tensors, network, alg, info, callback)
     end
 end
 

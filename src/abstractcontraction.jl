@@ -141,11 +141,12 @@ end
 # end
 
 function contract(tensors, network)
-    return contract.(tensors, network, CartesianIndices(network))
+    inds = collect(CartesianIndices(network))
+    return contract.(Ref(tensors), Ref(network), inds)
 end
 
 contract(tensors, network, i1::Int, i2::Int) = contract(tensors, network, i1:i1, i2:i2)
-contract(tensors, network, inds) = contract(tensors, network, inds...)
+contract(tensors, network, inds) = contract(tensors, network, inds[1], inds[2])
 
 function contract(ctmrg, network, i1::UnitRange, i2::UnitRange)
     cs = ctmrg.corners[i1, i2]

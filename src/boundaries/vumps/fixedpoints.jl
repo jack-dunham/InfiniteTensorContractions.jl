@@ -133,11 +133,21 @@ function fixedpoints!(
 
         NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
 
-        NN = sqrt(NN)
+        if NN > 0
+            NN = sqrt(NN)
+            # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
+            rmul!(FL[1, y], 1 / NN) #correct NN
+            rmul!(FR[end, y], 1 / NN) #correct NN
+        else
+            NN = sqrt(sqrt(NN^2))
+            # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
+            rmul!(FL[1, y], 1 / NN) #correct NN
+            rmul!(FR[end, y], 1 / -NN) #correct NN
+        end
 
-        # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
-        rmul!(FL[1, y], 1 / NN) #correct NN
-        rmul!(FR[end, y], 1 / NN) #correct NN
+        # # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
+        # rmul!(FL[1, y], 1 / NN) #correct NN
+        # rmul!(FR[end, y], 1 / NN) #correct NN
 
         for x in (Nx - 1):-1:1
             multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
