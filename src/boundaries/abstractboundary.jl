@@ -8,7 +8,7 @@ function similarboundary(
 ) where {Alg<:AbstractBoundaryAlgorithm}
     return Alg(;
         bonddim=alg.bonddim,
-        verbosity=alg.verbosity,
+        verbose=alg.verbose,
         maxiter=alg.maxiter,
         tol=alg.tol,
         kwargs...,
@@ -27,7 +27,6 @@ instead use function `initialize`.
 - `network::NType <: AbstractNetwork`: the network of tensors to be contracted
 - `alg::Alg`: the contraction algorithm to be used
 - `info::ConvergenceInfo`: information about the covergence progress of the algorithm
-- `outfile::String`: file to write data to
 """
 struct BoundaryState{
     Alg<:AbstractBoundaryAlgorithm,NType<:AbstractNetwork,T<:AbstractBoundaryTensors
@@ -79,24 +78,20 @@ function initialize(
     alg,
     initial_tensors=inittensors(rand, network, alg);
     store_initial=true,
-    prestep=identity,
-    poststep=identity,
+    callback=identity,
 )
     info = ConvergenceInfo()
 
     if store_initial
         initial_copy = deepcopy(initial_tensors)
-        return BoundaryState(
-            initial_tensors, network, alg, info, prestep, poststep, initial_copy
-        )
+        return BoundaryState(initial_tensors, network, alg, info, callback, initial_copy)
     else
-        return BoundaryState(initial_tensors, network, alg, info, prestep, poststep)
+        return BoundaryState(initial_tensors, network, alg, info, callback)
     end
 end
 
 function run!(state::AbstractBoundaryState)
-    prestep = state.prestep
-    poststep = state.poststep
+    callback = state.callback
 
     alg = state.alg
     info = state.info
@@ -113,15 +108,13 @@ function run!(state::AbstractBoundaryState)
     args = start(state)
 
     while info.iterations < maxiter && info.error ≥ tol
-        prestep(state, args...)
-
         info.error = step!(state.tensors, network, alg, args...)
 
         info.iterations += 1
 
         alg.verbose && @info "Error ≈ $(info.error) \t after $(info.iterations) iterations"
 
-        poststep(state, args...)
+        callback(state, args...)
     end
 
     info.error > tol ? info.converged = false : info.converged = true
