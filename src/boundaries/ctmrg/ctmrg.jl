@@ -86,7 +86,6 @@ function Base.getindex(edges::Edges, i...)
     return t1s, t2s, t3s, t4s
 end
 
-
 function updatecorners!(corners::C, corners_p::C) where {C<:Corners}
     C1, C2, C3, C4 = unpack(corners)
     C1_p, C2_p, C3_p, C4_p = unpack(corners_p)
@@ -111,7 +110,7 @@ function run!(ctmrg::CTMRGTensors, network, alg::CTMRG; kwargs...)
         ctmrg,
         network;
         bonddim=alg.bonddim,
-        verbosity=alg.verbosity,
+        verbose=alg.verbose,
         tol=alg.tol,
         maxiter=alg.maxiter,
     )
@@ -199,7 +198,9 @@ function step!(
     updatecorners!(ctmrg_p, ctmrg)
 
     # Sweep along the y axis (up/down)
-    ctmrgmove!(ctmrg_p, y_projectors, network_p, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol)
+    ctmrgmove!(
+        ctmrg_p, y_projectors, network_p, bonddim; svd_alg=alg.svd_alg, ptol=alg.ptol
+    )
 
     # Update the unpermuted (true) tensors.
     updatecorners!(ctmrg, ctmrg_p)
