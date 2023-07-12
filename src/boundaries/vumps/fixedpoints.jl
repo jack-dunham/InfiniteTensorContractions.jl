@@ -15,15 +15,6 @@ FixedPoints(f, mps::MPS, network::AbstractNetwork) = initfixedpoints(f, mps, net
 
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
-# DEPREC
-#=
-function get_truncmetric_tensors(fp::FixedPoints, bond::Bond)
-    l = left(bond)
-    r = right(bond)
-    return fp.left[l], fp.right[r]
-end
-=#
-
 function initfixedpoints(f, mps::MPS, network::AbstractNetwork)
     mps_tensor = getcentral(mps)
     # network_tensor = convert.(TensorMap, network)
@@ -103,8 +94,7 @@ end
 function fixedpoints!(fpoints::FixedPoints, mps::MPS, network)
     AL, C, AR, _ = unpack(mps)
 
-
-    TransferMatrix(AL[1,1], network[1,1], AL[1,1])
+    TransferMatrix(AL[1, 1], network[1, 1], AL[1, 1])
 
     tm_left = TransferMatrix.(AL, network, circshift(AL, (0, -1)))
     tm_right = TransferMatrix.(AR, network, circshift(AR, (0, -1)))
@@ -124,23 +114,20 @@ function fixedpoints!(
     Nx, Ny = size(C)
 
     for y in 1:Ny
-        # _, Ls, _ = eigsolve(z -> fpsolve(z, AL, M, 1, y), FL[1, y], 1, :LM)
-        # _, Rs, _ = eigsolve(z -> fpsolve(z, AR, M, Nx, y), FR[Nx, y], 1, :LM)
-        scal_left, Ls, linfo = eigsolve(
+        left, Ls, linfo = eigsolve(
             z -> leftsolve(z, tm_left[:, y]), FL[1, y], 1, :LM; ishermitian=false
         )
-        scal_right, Rs, rinfo = eigsolve(
+        right, Rs, rinfo = eigsolve(
             z -> rightsolve(z, tm_right[:, y]), FR[Nx, y], 1, :LM; ishermitian=false
         )
 
         FL[1, y] = Ls[1]
         FR[end, y] = Rs[1]
 
-        # @info "left: $(scal_left[1]) right: $(scal_right[1])"
+        @debug "Fixed point leading eigenvalues:" left = left[1] right = right[1]
+        @debug "Fixed point convergence info:" left = linfo right = rinfo
 
         for x in 2:Nx
-            # FL[x, y] =
-            #     FL[x - 1, y] * TransferMatrix(AL[x - 1, y], M[x - 1, y], AL[x - 1, y + 1])#works
             multransfer!(FL[x, y], FL[x - 1, y], tm_left[x - 1, y])
         end
 
@@ -153,8 +140,6 @@ function fixedpoints!(
         rmul!(FR[end, y], 1 / NN) #correct NN
 
         for x in (Nx - 1):-1:1
-            # FR[x, y] =
-            #     TransferMatrix(AR[x + 1, y], M[x + 1, y], AR[x + 1, y + 1]) * FR[x + 1, y]#works
             multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
 
             NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
@@ -166,13 +151,11 @@ function fixedpoints!(
         # First x seems to be normalized, but not second x
         for x in 1:Nx
             NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
-            # @warn "NN: $((x,y)),  $NN"
-            # rmul!(FR[x, y], 1 / (NN))
-            # rmul!(FL[x + 1, y], 1 / (NN))
         end
     end
     return fpoints
 end
+
 # FL[x] * T[x] = FL[x + 1]
 function leftsolve(f0, Ts)
     f_new = f0
@@ -189,172 +172,20 @@ function rightsolve(f0, Ts)
     return f_new
 end
 
-function simple_environments!(FL, FR, A, M)
-    Nx, Ny = size(M)
-
-    # λ = Matrix{numbertype(M)}(undef, Nx, Ny)
-
-    AL, C, AR, _ = unpack(A)
-
-    for x in 1:Nx, y in 1:Ny
-        _, Ls, _ = eigsolve(z -> fpsolve(z, AL, M, x, y), FL[x, y], 1, :LM)
-        _, Rs, _ = eigsolve(z -> fpsolve(z, AR, M, x, y), FR[x, y], 1, :LM)
-
-        FL[x, y] = Ls[x]
-        FR[x, y] = Rs[x]
-    end
-    return FL, FR
-end
-
-function fpsolve(fl::AbsTen{1,2}, A::AbstractUnitCell, M, x::Int, y::Int)
-    Nx = size(A)[1]
-    fl_n = flsolve(fl, A, M, x, y, Val(Nx))
-    return fl_n
-end
-function fpsolve(fr::AbsTen{2,1}, A::AbstractUnitCell, M, x::Int, y::Int)
-    Nx = size(A)[1]
-    fr_n = frsolve(fr, A, M, x, y, Val(Nx))
-    return fr_n
-end
-
-# Right-environment
-function flsolve(
-    fl::AbstractTensorMap{S,1,2},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{1},
-) where {S}
-    flu = similar(fl)
-    @tensoropt begin
-        flu[8; 6 7] =
-            fl[3; 1 2] * (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5]
-    end
-    return flu
-end
-function flsolve(
-    fl::AbstractTensorMap{S,1,2},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{2},
-) where {S}
-    flu = similar(fl)
-    @tensoropt begin
-        flu[13; 11 12] =
-            fl[3; 1 2] *
-            (a[x, y])[1 4; 6] *
-            (m[x, y])[2 5; 7 4] *
-            (a[x, y + 1]')[8; 3 5] *
-            (a[x + 1, y])[6 9; 11] *
-            (m[x + 1, y])[7 10; 12 9] *
-            (a[x + 1, y + 1]')[13; 8 10]
-    end
-    return flu
-end
-
-function flsolve(
-    fl::AbstractTensorMap{S,1,2},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{3},
-) where {S}
-    flu = similar(fl)
-    @tensoropt begin
-        flu[18; 16 17] =
-            fl[3; 1 2] *
-            (a[x, y])[1 4; 6] *
-            (m[x, y])[2 5; 7 4] *
-            (a[x, y + 1]')[8; 3 5] *
-            (a[x + 1, y])[6 9; 11] *
-            (m[x + 1, y])[7 10; 12 9] *
-            (a[x + 1, y + 1]')[13; 8 10] *
-            (a[x + 2, y])[11 14; 16] *
-            (m[x + 2, y])[12 15; 17 14] *
-            (a[x + 2, y + 1]')[18; 13 15]
-    end
-    return flu
-end
-
-# Right-environment
-function frsolve(
-    fr::AbstractTensorMap{S,2,1},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{1},
-) where {S}
-    fru = similar(fr)
-    @tensoropt begin
-        fru[1 2; 3] =
-            (a[x, y])[1 4; 6] * (m[x, y])[2 5; 7 4] * (a[x, y + 1]')[8; 3 5] * fr[6 7; 8]
-    end
-    return fru
-end
-function frsolve(
-    fr::AbstractTensorMap{S,2,1},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{2},
-) where {S}
-    fru = similar(fr)
-    @tensoropt begin
-        fru[1 2; 3] =
-            (a[x - 1, y])[1 4; 6] *
-            (m[x - 1, y])[2 5; 7 4] *
-            (a[x - 1, y + 1]')[8; 3 5] *
-            (a[x, y])[6 9; 11] *
-            (m[x, y])[7 10; 12 9] *
-            (a[x, y + 1]')[13; 8 10] *
-            fr[11 12; 13]
-    end
-    return fru
-end
-function frsolve(
-    fr::AbstractTensorMap{S,2,1},
-    a::AbstractMatrix{<:AbstractTensorMap{S,2,1}},
-    m::AbstractMatrix{<:AbstractTensorMap{S,2,2}},
-    x::Int,
-    y::Int,
-    ::Val{3},
-) where {S}
-    fru = similar(fr)
-    @tensoropt begin
-        fru[1 2; 3] =
-            (a[x - 2, y])[1 4; 6] *
-            (m[x - 2, y])[2 5; 7 4] *
-            (a[x - 2, y + 1]')[8; 3 5] *
-            (a[x - 1, y])[6 9; 11] *
-            (m[x - 1, y])[7 10; 12 9] *
-            (a[x - 1, y + 1]')[13; 8 10] *
-            (a[x, y])[11 14; 16] *
-            (m[x, y])[12 15; 17 14] *
-            (a[x, y + 1]')[18; 13 15] *
-            fr[16 17; 18]
-    end
-    return fru
-end
-
-function fptest(FL, FR, A, M)
-    nx, ny = size(M)
-    AL, C, AR, _ = unpack(A)
-    for x in 1:nx, y in 1:ny
-        println(
-            "Left: ",
-            isapprox(
-                normalize(FL[x, y]), normalize(fpsolve(FL[x, y], AL, M, x, y)); atol=1e-3
-            ),
-        )
-        println(
-            "Right: ",
-            isapprox(normalize(FR[x, y]), normalize(fpsolve(FR[x, y], AR, M, x, y))),
-        )
-    end
-end
+# This needs updated
+# function fptest(FL, FR, A, M)
+#     nx, ny = size(M)
+#     AL, C, AR, _ = unpack(A)
+#     for x in 1:nx, y in 1:ny
+#         println(
+#             "Left: ",
+#             isapprox(
+#                 normalize(FL[x, y]), normalize(fpsolve(FL[x, y], AL, M, x, y)); atol=1e-3
+#             ),
+#         )
+#         println(
+#             "Right: ",
+#             isapprox(normalize(FR[x, y]), normalize(fpsolve(FR[x, y], AR, M, x, y))),
+#         )
+#     end
+# end

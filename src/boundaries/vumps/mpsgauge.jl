@@ -24,16 +24,13 @@ function leftgauge!(
 
     Tp = permute(T, (4, 2), (3, 1))
 
-    # λs, Ls, info = KrylovKit.eigsolve(
-    #     y -> lgsolve(y, T), L[end], 1, :LM; ishermitian=true, tol=tol, eager=true, maxiter=1
-    # )
     λs, Ls, info = KrylovKit.eigsolve(
         y -> y * Tp, L[end], 1, :LM; ishermitian=false, tol=tol, eager=true, maxiter=1
     )
 
     Lp = permute(Ls[1], (1,), (2,))
 
-    @debug "MPS fixed point info:" hermiticity = norm(Lp - Lp')
+    @debug "MPS fixed point info:" λ = λs[1] info = info hermiticity = norm(Lp - Lp')
 
     Lp = 1 / 2 * (Lp + Lp')
 
@@ -47,7 +44,6 @@ function leftgauge!(
     for x in r
         Lold = L[x - 1]
 
-        # AL[x], L[x] = leftorth!(mulbond!(AL[x], L[x - 1], A[x]))
         AL[x], L[x] = leftdecomp!(deepcopy(AL[x]), deepcopy(L[x - 1]), A[x])
         λ[x] = norm(L[x])
         rmul!(L[x], 1 / λ[x])

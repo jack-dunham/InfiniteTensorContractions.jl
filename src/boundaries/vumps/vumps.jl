@@ -204,100 +204,20 @@ function updateright!(ar::AbstractTensorMap, ac::AbstractTensorMap, c::AbstractT
     return errR
 end
 
-# function updateright!(ar::AbstractTensorMap, ac::AbstractTensorMap, c::AbstractTensorMap)
-#     ac_p = permutedom(ac, (2, 1))
-#     c_p = permutedom(c, (2, 1))
-#
-#     ar_p = deepcopy(ac_p)
-#
-#     errR = updateleft!(ar_p, ac_p, c_p)
-#
-#     permute!(ar, ar_p, (1,), (3, 2))
-#
-#     return errR
-# end
-
 function updateright!(A::MPS)
     _, C, AR, AC = unpack(A)
     errR = updateright!.(AR, AC, circshift(C, (1, 0)))
     return errR
 end
 
-# function updateright!(A::MPS)
-#     errR = updateright!.(A)
-#     return A, hcat(errR...)
-# end
-# function vumps_rightupdate(AC,C)
-#     U,S,V = tsvd(_CA(C', AC), (2,),(1,3))
-#     AR = _CA(U, permute(V, (2,1),(3,)))
-#     ϵR = norm(AC - _CA(C,AR))
-#     return AR, ϵR
-# end
 function updateboth!(A::MPS)
     errL = updateleft!(A)
     errR = updateright!(A)
     return A, errL, errR
 end
 
-#= 
-function tracecontract(vumps::VUMPSTensors, network)
-    AC = getcentral(vumps.mps)
-    FL = vumps.fixedpoints.left
-    FR = vumps.fixedpoints.right
-    return tracecontract.(FL, FR, AC, circshift(AC, (0, -1)), network)
-end
-function onelocalcontract(vumps::VUMPSTensors, network)
-    AC = getcentral(vumps.mps)
-    FL = vumps.fixedpoints.left
-    FR = vumps.fixedpoints.right
-
-    cod = codomain.(network)
-
-    return onelocalcontract.(FL, FR, AC, circshift(AC, (0, -1)), network)
-end
-
-function metric(pepo::AbstractPEPO, vumps::VUMPSTensors, bond::Bond)
-    fs = get_truncmetric_tensors(vumps.fixedpoints, bond)
-
-    as = get_truncmetric_tensors(vumps.mps, bond)
-
-    ms = pepo[bond]
-
-    return truncmetriccontract(fs..., as..., ms...)
-end
-
-function truncmetric!(dst, vumps::VUMPSTensors, network::ContractableTensors)
-    mps = vumps.mps
-
-    AC = getcentral(mps)
-    AR = getright(mps)
-
-    FL = vumps.fixedpoints.left
-    FR = vumps.fixedpoints.right
-
-    # for x in axes(network, 1)
-    #     for y in axes(network, 2)
-    #         truncmetriccontract!(dst[x,y],FL[x,y],AC[x,y],AC[x,y+1],AR[x+1,y],AR[x+1,y+1],network[x,y],network[x+1,y],FR[x+1,y])
-    #     end
-    # end
-    #
-    # return dst
-
-    return truncmetriccontract!.(
-        dst,
-        FL,
-        circshift(FR, (-1, 0)),
-        AC,
-        circshift(AC, (0, -1)),
-        circshift(AR, (-1, 0)),
-        circshift(AR, (-1, -1)),
-        network,
-        circshift(network, (-1, 0)),
-    )
-end
-
 ### TESTING TODO: DELETE
-
+#=
 function vumps_test()
     βc = log(1 + sqrt(2)) / 2
     β = 1.0 * βc

@@ -158,24 +158,3 @@ function mulbond!(
 ) where {S<:IndexSpace}
     return @tensoropt AC[p1 p2; xr xl] = A[p1 p2; x_in xl] * C[xr x_in]
 end
-
-
-# DEPREC
-#=
-
-function get_truncmetric_tensors(mps::MPS, bond::Bond)
-    bond_1 = bond
-    # bond_2 = nextrow(bond)
-
-    AC = getcentral(mps)
-    AR = getright(mps)
-
-    ac_u = AC[left(bond_1)]
-    ac_d = AC[left(bond_1)+CartesianIndex(0, 1)]
-
-    ar_u = AR[right(bond_1)]
-    ar_d = AR[right(bond_1)+CartesianIndex(0, 1)]
-
-    return ac_u, ac_d, ar_u, ar_d
-end
-=#
