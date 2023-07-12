@@ -373,20 +373,16 @@ function testctmrg(data_func)
     s = ℂ^2
 
     network =
-        x -> ContractableTensors(
-            fill(TensorMap((data_func(x)[1]), one(s), s * s * s' * s'), 2, 2)
-        )
+        x -> UnitCell(fill(TensorMap((data_func(x)[1]), one(s), s * s * s' * s'), 2, 2))
     network_magn =
-        x -> ContractableTensors(
-            fill(TensorMap(data_func(x)[2], one(s), s * s * s' * s'), 2, 2)
-        )
+        x -> UnitCell(fill(TensorMap(data_func(x)[2], one(s), s * s * s' * s'), 2, 2))
 
     rv = []
     rv_exact = []
 
-    alg = CTMRG(; bonddim=2, verbosity=1, maxiter=200)
+    alg = CTMRG(; bonddim=2, verbose=true, maxiter=200)
 
-    for x in 1.1:0.001:2
+    for x in 1.1:0.05:2
         b1 = network(x * βc)
         b2 = network_magn(x * βc)
 
@@ -396,10 +392,10 @@ function testctmrg(data_func)
 
         calculate!(state)
 
-        Z = contract(state.tensors, b1)
-        magn = contract(state.tensors, b2) / Z
-
-        push!(rv, abs(magn))
+        # # Z = contract(state.tensors, b1)
+        # # magn = contract(state.tensors, b2) ./ Z
+        #
+        # # push!(rv, abs.(magn))
 
         M = abs((1 - sinh(2 * x * βc)^(-4)))^(1 / 8)
         push!(rv_exact, M)
