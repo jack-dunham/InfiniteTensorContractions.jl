@@ -135,16 +135,16 @@ function fixedpoints!(
 
         @debug "" norm = NN
         
-        if NN > 0.0
-            NN = sqrt(NN)
-            # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
-            rmul!(FL[1, y], 1 / NN) #correct NN
-            rmul!(FR[end, y], 1 / NN) #correct NN
-        else
+        if isa(NN, AbstractFloat) && NN < 0.0
             NN = sqrt(sqrt(NN^2))
             # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
             rmul!(FL[1, y], 1 / NN) #correct NN
             rmul!(FR[end, y], 1 / -NN) #correct NN
+        else
+            NN = sqrt(NN)
+            # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
+            rmul!(FL[1, y], 1 / NN) #correct NN
+            rmul!(FR[end, y], 1 / NN) #correct NN
         end
 
         # # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
