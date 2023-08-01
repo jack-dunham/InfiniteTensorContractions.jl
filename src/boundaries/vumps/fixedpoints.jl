@@ -115,10 +115,10 @@ function fixedpoints!(
 
     for y in 1:Ny
         left, Ls, linfo = eigsolve(
-            z -> leftsolve(z, tm_left[:, y]), FL[1, y], 1, :LM; ishermitian=false
+            z -> leftsolve(z, tm_left[:, y]), FL[1, y], 1, :LM; ishermitian=false, eager=true, maxiter=1
         )
         right, Rs, rinfo = eigsolve(
-            z -> rightsolve(z, tm_right[:, y]), FR[Nx, y], 1, :LM; ishermitian=false
+            z -> rightsolve(z, tm_right[:, y]), FR[Nx, y], 1, :LM; ishermitian=false, eager=true, maxiter=1
         )
 
         FL[1, y] = Ls[1]
