@@ -57,7 +57,7 @@ function inittensors(f, network, alg::VUMPS)
 
     boundary_mps = MPS(f, numbertype(network), north_bonds, chi)
 
-    fixed_points = fixedpoints(boundary_mps, network)
+    fixed_points = initfixedpoints(f, boundary_mps, network)
 
     return VUMPSTensors(boundary_mps, fixed_points)
 end
