@@ -64,12 +64,23 @@ function boundary_verify(tensors, alg)
     return nothing
 end
 
+function initialize(network::AbstractUnitCell, alg; store_initial=true, callback=identity)
+    net = ensure_contractable(network)
+
+    initial_tensors = inittensors(net, alg)
+
+    return _initialize(net, alg, initial_tensors, store_initial, callback)
+end
 function initialize(
-    network::AbstractUnitCell,
-    alg,
-    initial_tensors=inittensors(rand, network, alg);
-    store_initial=true,
-    callback=identity,
+    network::AbstractUnitCell, alg, initial_tensors; store_initial=true, callback=identity
+)
+    net = ensure_contractable(network)
+
+    return _initialize(net, alg, initial_tensors, store_initial, callback)
+end
+
+function _initialize(
+    network::AbstractUnitCell, alg, initial_tensors, store_initial, callback
 )
     info = ConvergenceInfo()
 
@@ -94,7 +105,8 @@ function run!(state::AbstractBoundaryState)
     tol = alg.tol
 
     # Remove any wrappers, converting tensors to appropriate forms.
-    network = ensure_contractable(state.network)
+    network = state.network
+    # network = ensure_contractable(state.network) # now done in initialize
 
     args = start(state)
 
