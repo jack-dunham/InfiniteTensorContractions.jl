@@ -182,6 +182,13 @@ function start(state)
     return ctmrg_p, network_p, x_projectors, y_projectors, S1, S2, S3, S4, state.info
 end
 
+struct SingularValues{S}
+    S1::S
+    S2::S
+    S3::S
+    S4::S
+end
+
 function step!(
     ctmrg::CTMRGTensors,# mutating 
     network,
@@ -567,7 +574,14 @@ function ctmrgmove!(
         # left/down move
         for y in axes(network, 2)
             recleftbiorth!(
-                UL[:, y], VL[:, y], C1[:, y], C4[:, y + 1], T1[:, y], T3[:, y + 1]; x0=1, incr=1
+                UL[:, y],
+                VL[:, y],
+                C1[:, y],
+                C4[:, y + 1],
+                T1[:, y],
+                T3[:, y + 1];
+                x0=1,
+                incr=1,
             )
         end
         for y in axes(network, 2)
@@ -591,7 +605,14 @@ function ctmrgmove!(
             #     reverse(T1[:, y]),
             # )
             recleftbiorth!(
-                VR[:, y], UR[:, y], C3[:, y + 1], C2[:, y], T3[:, y + 1], T1[:, y]; x0=0, incr=-1
+                VR[:, y],
+                UR[:, y],
+                C3[:, y + 1],
+                C2[:, y],
+                T3[:, y + 1],
+                T1[:, y];
+                x0=0,
+                incr=-1,
             )
         end
         for y in axes(network, 2)
@@ -953,11 +974,6 @@ function biorth_fixed_point!(C0, AU, AD, coord, increment)
     return C0
 end
 
-function biorth_fixed_point_map!(C1, C, AU, AD)
-    @tensoropt C1[ur; dr] = C[ul; dl] * AU[p; ur ul] * AD[p; dl dr]
-    return C1
-end
-
 function biorth_get_gauge_transform(C0, AU, AD; x0, incr, χ)
     biorth_fixed_point!(C0, AU, AD, x0, incr)
 
@@ -996,14 +1012,14 @@ function biorth_verify(CU, CD, AU, AD, UL, VL; x0, incr, kwargs...)
         ϵu[c] = norm(normalize(t1) - normalize(t2))
         ϵd[c] = norm(normalize(s1) - normalize(s2))
 
-        ϵu[c] < sqrt(eps()) || @warn "CU($c) * TU($c) ≈ PU($c) * CU($(mod(c + incr,r))):" ϵu[c]
-        ϵd[c] < sqrt(eps()) || @warn "CD($c) * TD($c) ≈ PD($c) * CD($(mod(c + incr,r))):" ϵd[c]
-
+        ϵu[c] < sqrt(eps()) ||
+            @warn "CU($c) * TU($c) ≈ PU($c) * CU($(mod(c + incr,r))):" ϵu[c]
+        ϵd[c] < sqrt(eps()) ||
+            @warn "CD($c) * TD($c) ≈ PD($c) * CD($(mod(c + incr,r))):" ϵd[c]
     end
 
     return ϵu, ϵd
 end
-
 
 function recleftbiorth!(UL, VL, CU, CD, AU, AD; x0=1, incr=1, χ=domain(CU[1], 1))
     nx = length(AD)
@@ -1013,7 +1029,6 @@ function recleftbiorth!(UL, VL, CU, CD, AU, AD; x0=1, incr=1, χ=domain(CU[1], 1
     C0 = broadcast(CU, CD) do CU, CD
         @tensoropt C0[a; b] := CU[a c] * CD[b c]
     end
-
 
     # val, vec, info = eigsolve(RecursiveVec(C0...), 1, :LM; eager=true, maxiter=1) do x0
     #     recleftbiorth_solve(x0, AU, AD)
@@ -1083,16 +1098,10 @@ function recleftbiorth!(UL, VL, CU, CD, AU, AD; x0=1, incr=1, χ=domain(CU[1], 1
 
     maximum(biorthness) < sqrt(eps()) || @warn "Biorth tol $biorthness after $numiter"
 
-    biorth_verify(CU,CD,AU,AD,UL,VL; x0=x0, incr=incr)
+    biorth_verify(CU, CD, AU, AD, UL, VL; x0=x0, incr=incr)
 
     return UL, VL
 end
-
-function conjugate(t::AbstractTensorMap)
-    return TensorMap(conj(t.data), codomain(t), domain(t))
-end
-
-const cj = conjugate
 
 # swapvirtual(t::AbsTen{1,2}) = permute(t, (1,), (3, 2))
 # swapvirtual(t::AbsTen{2,2}) = permute(t, (1, 2), (4, 3))
