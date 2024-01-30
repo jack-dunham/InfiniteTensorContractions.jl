@@ -11,17 +11,16 @@ export ITC
 export AbstractUnitCellGeometry
 export AbstractUnitCell
 
-export AbstractContractionAlgorithm, AbstractProblemState, AbstractContractionTensors
-export AbstractBoundaryAlgorithm, AbstractBoundaryState, AbstractBoundaryTensors
+export AbstractProblemState
+export AbstractBoundaryAlgorithm 
 
 export Square
 export UnitCell
 export TensorPair, bondspace, swapaxes, invertaxes
 
 export VUMPS, CTMRG, TRG
-export BoundaryState
 export VUMPSRuntime, MPS, FixedPoints
-export CornerMethodTensors, Corners, Edges, corners, edges
+export CornerMethodTensors, Corners, Edges
 
 export newproblem, initialize, run!, run, contract
 

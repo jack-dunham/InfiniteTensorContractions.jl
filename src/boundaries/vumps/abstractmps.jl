@@ -72,7 +72,7 @@ function isgauged(mps::AbstractMPS)
 
     for single_mps in mps
         unp = unpack(single_mps)
-        if all(x -> ch_isassigned(x), unpack(single_mps))
+        if all(x -> ch_isassigned(x), unp)
             AL, C, AR, AC = unp
             for x in axes(AL, 1)
                 if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x - 1], AR[x]) ≈ AC[x])

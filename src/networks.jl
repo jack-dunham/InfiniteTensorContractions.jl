@@ -13,6 +13,12 @@ ContractableTrait(::Type) = NotContractable()
 TensorKit.spacetype(uc::AbstractUnitCell) = spacetype(typeof(uc))
 TensorKit.spacetype(::Type{<:AbstractNetwork{G,T}}) where {G,T} = spacetype(T)
 
+"""
+    TensorPair{S<:IndexSpace,N₁,N₂, ...} <: AbstractTensorMap{S, N₁, N₂}
+
+Subtype of `AbstractTensorMap` for representing a two-layered tensor map, e.g. a 
+tensor and its conjugate.
+"""
 struct TensorPair{S,N₁,N₂,T<:AbstractTensorMap{S,N₁,N₂}} <: AbstractTensorMap{S,N₁,N₂}
     top::T
     bot::T
@@ -56,7 +62,7 @@ invertaxes(network::AbstractNetwork) = invertaxes.(network)
 """
     bondspace(t)
 
-Return an NTuple{4,<:VectorSpace} containing the east, south, west, and north vector spaces associated with the respective
+Return an `NTuple{4,<:VectorSpace}` containing the east, south, west, and north vector spaces associated with the respective
 bonds, in that order. Used to initialise appropriate algorithm tensors. For custom data types, this function must be 
 specified for use in contraction algorithms.
 """

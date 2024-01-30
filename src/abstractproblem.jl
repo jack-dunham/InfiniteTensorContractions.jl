@@ -191,7 +191,7 @@ Restart the algorithm entirely, returning the tensors to their initial state.
 function restart!(problem::ProblemState)
     if isdefined(problem, :initial_tensors)
         reset!(problem)
-        deepcopy!(problem.tensors, problem.initial_tensors)
+        deepcopy!(problem.runtime, problem.initialruntime)
     else
         println(
             "Cannot restart algorithm as initial tensors are undefined. Doing nothing..."
