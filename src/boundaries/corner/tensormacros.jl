@@ -1,11 +1,19 @@
+symmetrise_corner!(x) = axpby!(1//2, cj(permutedom(x, (2, 1))), 1//2, x)
+function symmetrise_edge!(x)
+    return axpby!(1//2, isometry(codomain(x), codomain(x)') * transpose(x)', 1//2, x)
+end
+
 projectcorner(c, t, p) = projectcorner!(similar(c), c, t, p)
 function projectcorner!(c_dst, c_src, t, uv)
     if c_dst === c_src
         c_copy = deepcopy(c_src)
-        return _projectcorner!(c_dst, c_copy, t, uv)
+        _projectcorner!(c_dst, c_copy, t, uv)
     else
-        return _projectcorner!(c_dst, c_src, t, uv)
+        _projectcorner!(c_dst, c_src, t, uv)
     end
+    # nor = norm(cj(permutedom(c_dst, (2, 1))) - c_dst)
+    # symmetrise_corner!(c_dst)
+    return c_dst
 end
 function _projectcorner!(c_dst, c_src, t::AbsTen{1,2}, uv)
     # P: (x,D)<-(x_out)
@@ -22,10 +30,12 @@ projectedge(t, m, u, v) = projectedge!(similar(t), t, m, u, v)
 function projectedge!(t_dst, t_src, m, u, v)
     if t_dst === t_src
         t_copy = deepcopy(t_src)
-        return _projectedge!(t_dst, t_copy, m, u, v)
+        _projectedge!(t_dst, t_copy, m, u, v)
     else
-        return _projectedge!(t_dst, t_src, m, u, v)
+        _projectedge!(t_dst, t_src, m, u, v)
     end
+    # symmetrise_edge!(t_dst)
+    return t_dst
 end
 
 ## SINGLE LAYER
@@ -44,9 +54,7 @@ end
 
 function _projectedge!(
     t_dst::T, t_src::T, m::M, u::UV, v::UV
-) where {
-    S,T<:AbstractTensorMap{S,2,2},M<:TensorPair,UV<:AbstractTensorMap{S,3,1}
-}
+) where {S,T<:AbstractTensorMap{S,2,2},M<:TensorPair,UV<:AbstractTensorMap{S,3,1}}
     return _projectedge!(t_dst, t_src, m.bot, m.top, u, v)
 end
 
@@ -246,4 +254,17 @@ function halfcontract(
         T2_31[D5 E5; x5 x7]
 
     return top
+end
+
+projectcorner2d(c, t1, t4, m, uh, uv) = projectcorner2d!(similar(c), c, t1, t4, m, uh, uv)
+
+function projectcorner2d!(c_dst, c_src, t1, t4, m, uh, uv)
+    @tensoropt c_dst[h0 v0] =
+        c_src[h1 v1] *
+        t1[v2; h2 h1] *
+        uh[h2 h4; h0] *
+        t4[h3; v3 v1] *
+        m[h4 v4 h3 v2] *
+        uv[v3 v4; v0]
+    return c_dst
 end

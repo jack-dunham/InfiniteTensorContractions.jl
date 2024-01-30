@@ -31,71 +31,82 @@ Stores the parameters for the variational uniform matrix product state (VUMPS)  
     end
 end
 
-struct VUMPSTensors{
-    AType<:AbstractUnitCell,CType<:AbstractUnitCell,FType<:AbstractUnitCell
-} <: AbstractBoundaryTensors
+struct VUMPSRuntime{
+    AType<:AbstractUnitCell,
+    CType<:AbstractUnitCell,
+    FType<:AbstractUnitCell,
+    SType<:AbstractUnitCell,
+} <: AbstractBoundaryRuntime
     mps::MPS{AType,CType}
     fixedpoints::FixedPoints{FType}
+    svals::SType
 end
 
-contraction_boundary_type(::VUMPSTensors) = VUMPS
+contraction_boundary_type(::VUMPSRuntime) = VUMPS
 
-function Base.similar(vumps::VUMPSTensors)
-    return VUMPSTensors(similar(vumps.mps), similar(vumps.fixedpoints))
+function Base.similar(vumps::VUMPSRuntime)
+    return VUMPSRuntime(
+        similar(vumps.mps), similar(vumps.fixedpoints), similar(vumps.svals)
+    )
 end
 
-function inittensors(f, network, alg::VUMPS)
+function TensorKit.scalartype(v::VUMPSRuntime)
+    return promote_type(scalartype(v.mps), scalartype(v.fixedpoints))
+end
+
+function initialize(algorithm::VUMPS, network)
     # D = @. getindex(domain(network), 4)
 
     _, _, _, north_bonds = bondspace(network)
 
-    χ = dimtospace(spacetype(network), alg.bonddim)
+    χ = dimtospace(spacetype(network), algorithm.bonddim)
 
     chi = similar(north_bonds, typeof(χ))
 
     chi .= Ref(χ)
 
-    boundary_mps = MPS(f, numbertype(network), north_bonds, chi)
+    boundary_mps = MPS(randn, scalartype(network), north_bonds, chi)
 
-    fixed_points = initfixedpoints(f, boundary_mps, network)
+    fixed_points = initfixedpoints(randn, boundary_mps, network)
 
-    return VUMPSTensors(boundary_mps, fixed_points)
+    svals = broadcast(getbond(boundary_mps)) do bond
+        return tsvd(bond, (1,), (2,))[2]
+    end
+
+    return VUMPSRuntime(boundary_mps, fixed_points, svals)
 end
 
-function start(state::BoundaryState{VUMPS})
-    vumps = state.tensors
-    sing_val = x -> tsvd(x, (1,), (2,))[2]
-    return (sing_val.(getbond(vumps.mps)),)
+function step!(problem::ProblemState{<:VUMPS})
+    return step!(problem.runtime, problem.network, problem.algorithm)
 end
 
 function step!(
-    vumps::VUMPSTensors,    #mutating
+    vumps::VUMPSRuntime,    #mutating
     network::AbstractNetwork,
     ::VUMPS,
-    singular_values,        #mutating
 )
-    vumpsstep!(vumps, network)
+    vumpsstep!(vumps, network; ishermitian=forcehermitian(vumps, network))
 
-    error_per_site = boundaryerror!(singular_values, getbond(vumps.mps))
+    error_per_site = boundaryerror!(vumps.svals, getbond(vumps.mps))
 
     @debug "Error per site:" ϵᵢ = error_per_site
 
     return max(error_per_site...)
 end
 
-function vumpsstep!(vumps::VUMPSTensors, network)
+function vumpsstep!(vumps::VUMPSRuntime, network; kwargs...)
     mps = vumps.mps
     fps = vumps.fixedpoints
 
-    vumpsupdate!(mps, fps, network) # Vectorised
+    vumpsupdate!(mps, fps, network; kwargs...) # Vectorised
 
-    fixedpoints!(fps, mps, network)
+    fixedpoints!(fps, mps, network; kwargs...)
 
     return vumps
 end
 
 # Bulk of work
-function vumpsupdate!(A::MPS, FP::FixedPoints, M)
+function vumpsupdate!(A::MPS, FP::FixedPoints, M; ishermitian=forcehermitian(A, FP, M))
     FL = FP.left
     FR = FP.right
 
@@ -106,6 +117,8 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
     AC = getcentral(A)
     C = getbond(A)
 
+    cummul = 1
+
     for x in rx
 
         # take mps[y], get mps[y].AC, send in mps[y].AC[x]
@@ -115,12 +128,28 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
             RecursiveVec((AC[x, :])...),
             1,
             :LM;
-            ishermitian=false,
+            ishermitian=ishermitian,
+            # ishermitian=false,
         )
+
+        # @info "" ACs[1][1]
+        # @info "" normalize(1 / μ1s[1] * ACs[1][1])
+        # @info "" (1 / μ1s[1] * ACs[1][1])
 
         for y in ry
             AC[x, y] = ACs[1][y]
         end
+        # for y in ry
+        #     a = ACs[1][y]
+        #     normalize!(rmul!(a, 1 / μ1s[1]))
+        #     if imag(a) ≈ a
+        #         AC[x, y] = imag(a)
+        #     elseif real(a) ≈ a
+        #         AC[x, y] = real(a)
+        #     else
+        #         AC[x, y] = a
+        #     end
+        # end
         # now set mps[y-1, mod].AC[x] to output of above
 
         # A[mod(y - 1, ry)].AC[x] = ACs[1]
@@ -129,10 +158,14 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
             RecursiveVec((C[x, :])...),
             1,
             :LM;
-            ishermitian=false,
+            ishermitian=ishermitian,
+            # ishermitian=false,
         )
 
-        @debug "Effective Hamiltonian eigenvalues:" μ1 = μ1s[1] μ0 = μ0s[1] μ1 / μ0 =
+        # @info "" μ0s
+
+        @debug "Individual effective Hamiltonian eigenvalues:" μ1 = μ1s[1] μ0 = μ0s[1] μ1 /
+                                                                                       μ0 =
             (μ1s[1] / μ0s[1])
 
         for y in ry
@@ -140,7 +173,11 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M)
         end
         # A[mod(y - 1, ry)].C[x] = Cs[1]
         # λ = real(μ1s[1] / μ0s[1])
+
+        cummul *= μ1s[1] / μ0s[1]
     end
+
+    @debug "Unit cell density" μ1 / μ0 = cummul
 
     #A now as updated AC, C, need to update AL, AR
     _, errL, errR = updateboth!(A)
@@ -214,6 +251,36 @@ function updateboth!(A::MPS)
     errL = updateleft!(A)
     errR = updateright!(A)
     return A, errL, errR
+end
+
+function contract(vumps::VUMPSRuntime, network, i1::UnitRange, i2::UnitRange)
+    if length(i2) > 1
+        throw(
+            ArgumentError(
+                "Cannot contract a VUMPS boundary around more than one vertical tensor."
+            ),
+        )
+    else
+        i2 = i2[begin]
+    end
+
+    _, _, AR, AC = unpack(vumps.mps)
+
+    fixed_points = vumps.fixedpoints
+
+    l = i1[begin]
+    r = i1[end]
+
+    FL = fixed_points.left[l, i2]
+    FR = fixed_points.right[r, i2]
+
+    ACU = AC[l, i2]
+    ACD = AC[l, i2 + 1]'
+
+    ARU = tuple((AR[i, i2] for i in (l + 1):r)...)
+    ARD = tuple((AR[i, i2 + 1]' for i in (l + 1):r)...)
+
+    return _contractall(FL, FR, ACU, ARU, ACD, ARD, network[i1, i2])
 end
 
 ### TESTING TODO: DELETE

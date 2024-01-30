@@ -15,6 +15,8 @@ FixedPoints(f, mps::MPS, network::AbstractNetwork) = initfixedpoints(f, mps, net
 
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
+TensorKit.scalartype(::Type{<:FixedPoints{A}}) where {A} = scalartype(A)
+
 function initfixedpoints(f, mps::MPS, network::AbstractNetwork)
     mps_tensor = getcentral(mps)
     # network_tensor = convert.(TensorMap, network)
@@ -26,7 +28,7 @@ end
 function _initfixedpoints(
     f, mps::AbstractTensorMap{S}, network, leftright::Symbol
 ) where {S}
-    T = promote_type(eltype(mps), numbertype(network))
+    T = promote_type(scalartype(mps), scalartype(network))
 
     cod = fixedpoint_codomain(network, leftright)
     dom = fixedpoint_domain(mps, leftright)
@@ -84,6 +86,14 @@ function hcapply!(
     return hc
 end
 
+function fixed_point_norm(cd, cu, fl, fr)
+    @tensoropt n = cu[ur ul] * fl[m; ul dl] * fr[m; ur dr] * conj(cd[dr dl])
+    return n
+end
+# function normalize(cd, cu, fl, fr)
+#     @tensoropt hc[dr dl] = cu[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr] * conj(cd[dr dl])
+# end
+
 function fixedpoints(mps::MPS, network)
     initial_fpoints = FixedPoints(rand, mps, network)
     return fixedpoints!(initial_fpoints, mps, network)
@@ -91,22 +101,28 @@ end
 
 #this is now the correct env func
 
-function fixedpoints!(fpoints::FixedPoints, mps::MPS, network)
+function fixedpoints!(
+    fpoints::FixedPoints,
+    mps::MPS,
+    network;
+    ishermitian=forcehermitian(fpoints, mps, network),
+)
     AL, C, AR, _ = unpack(mps)
 
-    TransferMatrix(AL[1, 1], network[1, 1], AL[1, 1])
+    # TransferMatrix(AL[1, 1], network[1, 1], AL[1, 1])
 
     tm_left = TransferMatrix.(AL, network, circshift(AL, (0, -1)))
     tm_right = TransferMatrix.(AR, network, circshift(AR, (0, -1)))
 
-    return fixedpoints!(fpoints, tm_left, tm_right, C)
+    return fixedpoints!(fpoints, tm_left, tm_right, C; ishermitian=ishermitian)
 end
 
 function fixedpoints!(
     fpoints::FixedPoints,
     tm_left::AbstractTransferMatrices,
     tm_right::AbstractTransferMatrices,
-    C::AbstractUnitCell,
+    C::AbstractUnitCell;
+    ishermitian=forcehermitian(fpoints, tm_left, tm_right, C),
 )
     FL = fpoints.left
     FR = fpoints.right
@@ -115,10 +131,22 @@ function fixedpoints!(
 
     for y in 1:Ny
         left, Ls, linfo = eigsolve(
-            z -> leftsolve(z, tm_left[:, y]), FL[1, y], 1, :LM; ishermitian=false, eager=true, maxiter=1
+            z -> leftsolve(z, tm_left[:, y]),
+            FL[1, y],
+            1,
+            :LM;
+            ishermitian=ishermitian,
+            eager=true,
+            maxiter=1,
         )
         right, Rs, rinfo = eigsolve(
-            z -> rightsolve(z, tm_right[:, y]), FR[Nx, y], 1, :LM; ishermitian=false, eager=true, maxiter=1
+            z -> rightsolve(z, tm_right[:, y]),
+            FR[Nx, y],
+            1,
+            :LM;
+            ishermitian=ishermitian,
+            eager=true,
+            maxiter=1,
         )
 
         FL[1, y] = Ls[1]
@@ -131,12 +159,13 @@ function fixedpoints!(
             multransfer!(FL[x, y], FL[x - 1, y], tm_left[x - 1, y])
         end
 
-        NN = renorm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
+        NN = fixed_point_norm(C[Nx, y + 1], C[Nx, y], Ls[1], Rs[1]) # Should be positive?
 
         @debug "" norm = NN
-        
+
+        # TODO: use normalize_fixed_points
         if isa(NN, AbstractFloat) && NN < 0.0
-            NN = sqrt(sqrt(NN^2))
+            NN = sqrt(sign(NN) * NN)
             # the eigenvalue problem eqn gives us FL[1,y] and FR[end,y], so normalise them
             rmul!(FL[1, y], 1 / NN) #correct NN
             rmul!(FR[end, y], 1 / -NN) #correct NN
@@ -154,20 +183,39 @@ function fixedpoints!(
         for x in (Nx - 1):-1:1
             multransfer!(FR[x, y], tm_right[x + 1, y], FR[x + 1, y])
 
-            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            NN = normalize_fixed_points!(FL[x + 1, y], FR[x, y], C[x, y + 1], C[x, y])
 
-            rmul!(FR[x, y], 1 / sqrt(NN))
-            rmul!(FL[x + 1, y], 1 / sqrt(NN))
+            # NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            #
+            # rmul!(FL[x + 1, y], 1 / sqrt(NN))
+            # rmul!(FR[x, y], 1 / sqrt(NN))
         end
 
         # First x seems to be normalized, but not second x
         for x in 1:Nx
-            NN = renorm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            NN = fixed_point_norm(C[x, y + 1], C[x, y], FL[x + 1, y], FR[x, y])
+            # println(NN)
         end
     end
     return fpoints
 end
 
+function normalize_fixed_points!(FL, FR, C1, C2)
+    # NN = renorm(C1, C2, FL, FR)
+    NN = fixed_point_norm(C1, C2, FL, FR)
+    if isa(NN, AbstractFloat)
+        s = sign(NN)
+        N1 = sqrt(s * NN)
+        N2 = s * sqrt(s * NN)
+
+    else
+        N1 = sqrt(NN)
+        N2 = sqrt(NN)
+    end
+    rmul!(FL, 1 / N1) #correct NN
+    rmul!(FR, 1 / N2) #correct NN
+    return FL, FR
+end
 # FL[x] * T[x] = FL[x + 1]
 function leftsolve(f0, Ts)
     f_new = f0

@@ -23,6 +23,8 @@ end
 @inline Base.getindex(uc::AbstractUnitCell, i...) = getindex(getdata(uc), i...)
 @inline Base.setindex!(uc::AbstractUnitCell, v, i...) = setindex!(getdata(uc), v, i...)
 
+## 
+
 ## SIMILAR
 
 @inline function Base.similar(uc::UnitCell{G,T}) where {G,T}
@@ -34,11 +36,11 @@ end
 @inline function Base.similar(uc::UnitCell{G,T}, dims::Dims) where {T,G}
     return UnitCell{G}(similar(getdata(uc), dims))
 end
-@inline function Base.similar(
-    uc::UnitCell{G,T}, ::Type{S}, dims::Dims
-) where {T,S,G}
+@inline function Base.similar(uc::UnitCell{G,T}, ::Type{S}, dims::Dims) where {T,S,G}
     return UnitCell{G}(similar(getdata(uc), S, dims))
 end
+
+##
 
 ## BROADCASTING
 
@@ -107,5 +109,8 @@ end
 
 ## TENSORS
 
-TensorKit.spacetype(::AbstractUnitCell{G,<:AbstractTensorMap{S}}) where {G,S} = S
-numbertype(::AbstractUnitCell{G,T}) where {G,T<:AbstractTensorMap} = eltype(T)
+function TensorKit.scalartype(
+    ::Type{<:AbstractUnitCell{G,T}}
+) where {G,T<:AbstractTensorMap}
+    return scalartype(T)
+end

@@ -1,3 +1,5 @@
+#= DEPREC (now in abstractproblem.jl)
+
 abstract type AbstractContractionAlgorithm end
 abstract type AbstractContractionState{Alg<:AbstractContractionAlgorithm} end
 abstract type AbstractContractionTensors end
@@ -111,6 +113,8 @@ end
     end
 end
 
+=#
+
 # DEPREC
 # @generated function isinitialised(ten::T) where {T}
 #     checks = [
@@ -142,17 +146,17 @@ end
 
 function contract(tensors, network)
     inds = collect(CartesianIndices(network))
-    return contract.(Ref(tensors), Ref(network), inds)
+
+    RT = promote_type(scalartype(tensors), scalartype(network))
+
+    rv = similar(network, RT)
+
+    rv .= contract.(Ref(tensors), Ref(network), inds)
+    return rv
 end
 
 contract(tensors, network, i1::Int, i2::Int) = contract(tensors, network, i1:i1, i2:i2)
 contract(tensors, network, inds) = contract(tensors, network, inds[1], inds[2])
-
-function contract(ctmrg, network, i1::UnitRange, i2::UnitRange)
-    cs = ctmrg.corners[i1, i2]
-    es = map(x -> tuple(x...), ctmrg.edges[i1, i2])
-    return _contractall(cs..., es..., network)
-end
 
 function get_bond_symbol(i, j, dir)
     if dir == :h
@@ -172,7 +176,7 @@ end
     T2::NTuple{Ny,E},
     T3::NTuple{Nx,E},
     T4::NTuple{Ny,E},
-    MS::AbstractMatrix{<:AbsTen{0}},
+    MS::AbstractArray{<:AbsTen{0}},
 ) where {Nx,Ny,E}
     gh = (i, j) -> get_bond_symbol(i, j, :h)
     gv = (i, j) -> get_bond_symbol(i, j, :v)
@@ -224,6 +228,45 @@ end
     )
 
     quote
+        @tensoropt rv = $e_einsum
+    end
+end
+
+@generated function _contractall(
+    FL,
+    FR,
+    ACU::T1,
+    ARU::NTuple{N,T1},
+    ACD::T2,
+    ARD::NTuple{N,T2},
+    MS::AbstractArray{<:AbsTen{0}},
+) where {N,T1,T2}
+    symb = (s, i) -> Symbol("$(s)_$i")
+
+    e_ARU = [
+        Expr(:ref, Expr(:ref, :ARU, i), symb(:n, i + 1), symb(:u, i + 1), symb(:u, i)) for
+        i in 1:N
+    ]
+    e_ARD = [
+        Expr(:ref, Expr(:ref, :ARD, i), symb(:d, i + 1), symb(:d, i), symb(:s, i + 1)) for
+        i in 1:N
+    ]
+
+    e_MS = [
+        Expr(
+            :ref, Expr(:ref, :MS, i), symb(:h, i), symb(:s, i), symb(:h, i - 1), symb(:n, i)
+        ) for i in 1:(N + 1)
+    ]
+
+    e_ACU = Expr(:ref, :ACU, symb(:n, 1), symb(:u, 1), symb(:u, 0))
+    e_ACD = Expr(:ref, :ACD, symb(:d, 1), symb(:d, 0), symb(:s, 1))
+    e_FL = Expr(:ref, :FL, symb(:h, 0), symb(:u, 0), symb(:d, 0))
+    e_FR = Expr(:ref, :FR, symb(:h, N + 1), symb(:u, N + 1), symb(:d, N + 1))
+
+    e_einsum = Expr(:call, :*, e_FL, e_FR, e_ACU, e_ACD, e_MS..., e_ARU..., e_ARD...)
+
+    quote
+        # @tensoropt rv = scalar($e_einsum)
         @tensoropt rv = $e_einsum
     end
 end

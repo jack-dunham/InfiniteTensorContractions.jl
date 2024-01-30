@@ -10,15 +10,22 @@ ContractableTrait(::Type{<:AbsTen{1,4}}) = IsContractable()
 ContractableTrait(::Type{<:AbsTen{2,4}}) = IsContractable()
 ContractableTrait(::Type) = NotContractable()
 
+TensorKit.spacetype(uc::AbstractUnitCell) = spacetype(typeof(uc))
+TensorKit.spacetype(::Type{<:AbstractNetwork{G,T}}) where {G,T} = spacetype(T)
+
 struct TensorPair{S,N₁,N₂,T<:AbstractTensorMap{S,N₁,N₂}} <: AbstractTensorMap{S,N₁,N₂}
     top::T
     bot::T
 end
 
+TensorPair(t::TensorMap) = TensorPair(t, t)
+
 const AbstractDoubleLayerNetwork{G,ElType<:TensorPair,A} = AbstractUnitCell{G,ElType,A}
 
 top(tp::TensorPair) = tp.top
 bot(tp::TensorPair) = tp.bot
+
+Base.:(==)(t1::TensorPair, t2::TensorPair) = (top(t1) == top(t2)) && (bot(t1) == bot(t2))
 
 tensortype(tp::TensorPair) = tensortype(typeof(tp))
 tensortype(::Type{<:TensorPair{S,N₁,N₂,T}}) where {S,N₁,N₂,T} = T
@@ -26,7 +33,10 @@ TensorKit.spacetype(t::TensorPair) = spacetype(tensortype(t))
 Base.eltype(t::TensorPair) = eltype(typeof(t))
 Base.eltype(T::Type{<:TensorPair}) = eltype(tensortype(T))
 
-numbertype(t::TensorPair) = eltype(t)
+TensorKit.storagetype(t::TensorPair) = storagetype(typeof(t))
+TensorKit.storagetype(t::Type{<:TensorPair}) = storagetype(tensortype(t))
+
+TensorKit.scalartype(T::Type{<:TensorPair}) = scalartype(tensortype(T))
 
 ContractableTrait(t::Type{TensorPair}) = ContractableTrait(tensortype(t))
 
@@ -89,3 +99,28 @@ west(t) = bondspace(t)[3]
 north(t) = bondspace(t)[4]
 
 ensure_contractable(x) = x
+
+function ensure_contractable(
+    x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,0,4}}
+)
+    return x
+end
+function ensure_contractable(
+    x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,N,4}}
+) where {N}
+    return TensorPair.(x)
+end
+
+rotate(tp::TensorPair, i) = TensorPair(rotate(top(tp), i), rotate(bot(tp), i))
+
+"""
+    adjoining_bondspace(network::AbstractUnitCell) -> E, S, W, N
+
+Returns a tuple of the east, south, west, and north bond spaces as unit cells shifted one 
+position in the opposite cardinal direction resepctively. For example, `N[x,y]` is the same 
+as `north(network)[x,y + 1]`.
+"""
+function adjoining_bondspace(network)
+    # east, south, west, north ← bondspace(network)
+    return map(circshift, bondspace(network), ((1, 0), (0, 1), (-1, 0), (0, -1)))
+end

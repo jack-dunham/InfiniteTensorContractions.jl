@@ -34,6 +34,8 @@ getcentral(mps::MPS) = mps.AC
 
 unpack(mps::AbstractMPS) = (getleft(mps), getbond(mps), getright(mps), getcentral(mps))
 
+TensorKit.scalartype(mps::AbstractMPS) = promote_type(map(scalartype, unpack(mps))...)
+
 # BASE
 
 Base.size(mps::AbstractMPS) = size(getcentral(mps))
@@ -66,26 +68,32 @@ end
 # GAUGING
 
 function isgauged(mps::AbstractMPS)
+    ch_isassigned = arr -> all(x -> x, isassigned.(Ref(arr), CartesianIndices(arr)))
+
     for single_mps in mps
         unp = unpack(single_mps)
-        if all(isassigned, unpack(single_mps))
+        if all(x -> ch_isassigned(x), unpack(single_mps))
             AL, C, AR, AC = unp
             for x in axes(AL, 1)
                 if !(mulbond(AL[x], C[x]) ≈ mulbond(C[x - 1], AR[x]) ≈ AC[x])
-                    return false
+                    return 0
                 end
             end
         else
-            @debug "Undefined MPS. Skipping gauge check..."
-            return true
+            return -1
         end
     end
-    return true
+    return 1
 end
 
 function validate(mps::AbstractMPS)
-    if !isgauged(mps)
+    isg = isgauged(mps)
+    if isg == 0
         @warn "MPS is not in mixed canonical form."
+    elseif isg == -1
+        @debug "Undefined MPS. Skipping gauge check..."
+    elseif isg == 1
+        # @debug "MPS is in mixed canonical form."
     end
     return mps
 end
@@ -105,7 +113,7 @@ end
 function MPS(A::AbstractUnitCell)
     bonds = @. getindex(domain(A), 1) # Canonical bond (right-hand) bond of mps tensor
 
-    T = numbertype(A)
+    T = scalartype(A)
 
     AL = similar.(A)
     C = @. TensorMap(rand, T, one(bonds), bonds * adjoint(bonds)) # R * L

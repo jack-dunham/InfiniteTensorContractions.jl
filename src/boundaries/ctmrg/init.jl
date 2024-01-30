@@ -11,16 +11,18 @@ end
 inittensors(corners::Corners, edges::Edges, ::CTMRG) = CTMRGTensors(corners, edges)
 
 function initpermuted(ctmrg::CTMRGTensors)
-    C1_t, C2_t, C3_t, C4_t = permutedims.(unpack(ctmrg.corners))
+    C1_t, C2_t, C3_t, C4_t = map(permutedims, unpack(ctmrg.corners))
 
-    C1_tp = permute.(C1_t, Ref(()), Ref((2, 1)))
-    C2_tp = permute.(C2_t, Ref(()), Ref((2, 1)))
-    C3_tp = permute.(C3_t, Ref(()), Ref((2, 1)))
-    C4_tp = permute.(C4_t, Ref(()), Ref((2, 1)))
+    pm(x) = map(i -> permute(i, ((), (2, 1))), x)
+
+    C1_tp = pm(C1_t)
+    C2_tp = pm(C2_t)
+    C3_tp = pm(C3_t)
+    C4_tp = pm(C4_t)
 
     corners_p = Corners(C1_tp, C4_tp, C3_tp, C2_tp)
 
-    T1_t, T2_t, T3_t, T4_t = permutedims.(unpack(ctmrg.edges))
+    T1_t, T2_t, T3_t, T4_t = map(permutedims, unpack(ctmrg.edges))
 
     edges_p = Edges(T4_t, T3_t, T2_t, T1_t)
 
@@ -30,7 +32,7 @@ end
 function initprojectors(network, chi::IndexSpace)
     _, bot_bonds, _, top_bonds = bondspace(network)
 
-    T = eltype(network.data[1,1])
+    T = eltype(network.data[1, 1])
 
     projectors = _initprojectors(T, top_bonds, bot_bonds, chi)
 
@@ -51,26 +53,36 @@ function _initprojectors(T::Type{<:Number}, top_bonds, bot_bonds, chi::IndexSpac
     return Projectors(UL, VL, UR, VR)
 end
 
-function initcorners(network, chi::S, ::Val{true}) where {S<:IndexSpace}
-    nil = Ref(one(chi))
+function initcorners(network, chi::S, v::Val) where {S<:IndexSpace}
+    C1, C2, C3, C4 = _initcorners(network, chi, v)
 
-    el = numbertype(network)
+    c = Corners(C1, C2, C3, C4)
 
-    chi_uc = similar(network, S)
+    randomize_if_zero!(c)
 
-    fill!(chi_uc, chi)
-
-    C1 = @. TensorMap(randn, el, nil, chi_uc * chi_uc)
-    C2 = @. TensorMap(randn, el, nil, adjoint(chi_uc) * adjoint(chi_uc))
-    C3 = @. TensorMap(randn, el, nil, chi_uc * chi_uc)
-    C4 = @. TensorMap(randn, el, nil, adjoint(chi_uc) * adjoint(chi_uc))
-
-    return Corners(C1, C2, C3, C4)
+    return c
 end
 
-function initcorners(network, chi::S, _::Val{false}=Val(false)) where {S<:IndexSpace}
-    corners = map(i -> init_single_corner.(network, Ref(chi), i), 1:4)
-    return randomize_if_zero!(Corners(corners...))
+function _initcorners(network, chi::S, ::Val{true}) where {S<:IndexSpace}
+    fl = let network = network, chi = chi, T = scalartype(network)
+        c -> broadcast(_ -> TensorMap(randn, T, one(chi), c * c), network)
+    end
+
+    C1 = fl(chi)
+    C2 = fl(adjoint(chi))
+    C3 = fl(chi)
+    C4 = fl(adjoint(chi))
+
+    return C1, C2, C3, C4
+end
+
+function _initcorners(network, chi::S, ::Val{false}) where {S<:IndexSpace}
+    C1, C2, C3, C4 = map(1:4) do i
+        return broadcast(network) do tensor
+            return init_single_corner(tensor, chi, i)
+        end
+    end
+    return C1, C2, C3, C4
 end
 
 function init_single_corner(ten::AbstractTensorMap, chi, i)
@@ -93,7 +105,7 @@ end
 function init_single_corner(tensor::AbstractTensorMap, ue, us, uw, un)
     s_o1 = domain(ue)
     s_o2 = domain(us)
-    c = TensorMap(undef, numbertype(tensor), one(s_o1), s_o1 * s_o2)
+    c = TensorMap(undef, scalartype(tensor), one(s_o1), s_o1 * s_o2)
     _init_single_corner!(c, tensor, ue, us, uw, un)
     return c
 end
@@ -180,13 +192,8 @@ function init_single_edge(tensor, ue, us, uw, un)
     s_o1 = domain(ue)
     s_o2 = domain(uw)
     d = swap(bondspace(tensor)[2]) # swapped south bond (north bond of tensor below)
-    #
-    # println(d)
-    # println(domain(tensor.top))
-    # println(s_o1)
-    # println(s_o2)
 
-    t_dst = TensorMap(undef, numbertype(tensor), d, s_o1 * s_o2)
+    t_dst = TensorMap(undef, scalartype(tensor), d, s_o1 * s_o2)
 
     return _init_single_edge!(t_dst, tensor, ue, us, uw, un)
 end
@@ -235,8 +242,8 @@ function initerror(ctmrg::CTMRGTensors)
     return S1, S2, S3, S4
 end
 
-randomize_if_zero!(corners::Corners) = _randomize_if_zero!(corners, :C)
-randomize_if_zero!(edges::Edges) = _randomize_if_zero!(edges, :T)
+randomize_if_zero!(corners::C) where {C<:Corners} = _randomize_if_zero!(corners, :C)::C
+randomize_if_zero!(edges::E) where {E<:Edges} = _randomize_if_zero!(edges, :T)::E
 
 function _randomize_if_zero!(corners_or_edges, type)
     all_tensors = unpack(corners_or_edges)

@@ -1,12 +1,20 @@
 # Solves AL * C = C * A (= AC)
+
+function lgsolve(x, T)
+    y = similar(x)
+    @tensoropt y[ur dr] = x[ul dl] * T[dr dl; ur ul]
+    return y
+end
+
 function leftgauge!(
     AL::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}},
     L::AbstractUnitCell{G,<:AbstractTensorMap{S,0,2}},
     A::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}};
-    tol=1e-12,
+    tol=1e-14,
     maxiter=100,
     verbose=false,
 ) where {G,S,N}
+    # verbose = true
     numsites = length(A)
     r = 1:numsites
 
@@ -22,24 +30,28 @@ function leftgauge!(
 
     T = multi_transfer(A, A) # dr dl, ur ul -> ul dl, ur dr
 
-    Tp = permute(T, (4, 2), (3, 1))
+    axpby!(1//2, T', 1//2, T)
 
-    λs, Ls, info = KrylovKit.eigsolve(
-        y -> y * Tp, L[end], 1, :LM; ishermitian=false, tol=tol, eager=true, maxiter=1
-    )
+    # Tp = permute(T, (4, 2), (3, 1))
 
-    Lp = permute(Ls[1], (1,), (2,))
+    λs, Ls, info =
+        KrylovKit.eigsolve(L[end], 1, :LM; ishermitian=false, eager=true, maxiter=1) do x0
+            x1 = similar(x0)
+            @tensoropt x1[ur dr] = x0[ul dl] * T[dr dl; ur ul]
+        end
+
+    Lp = permute(Ls[1], ((1,), (2,)))
 
     @debug "MPS fixed point info:" λ = λs[1] info = info hermiticity = norm(Lp - Lp')
-
-    Lp = 1 / 2 * (Lp + Lp')
+    # Lp = 1 / 2 * (Lp + Lp')
 
     # Eigenvector can be α * v, so choose α s.t. v positive
-    Lp = sqrt(Lp * Lp)
+    # Lp = sqrt(Lp * Lp)
 
-    D, V = eigh(Lp)
+    # D, V = eigh(Lp)
 
-    L[end] = permute(V * sqrt(D) * V', (), (1, 2))
+    # L[end] = permute(V * sqrt(D) * V', (), (1, 2))
+    permute!(L[end], sqrt(Lp * Lp), ((), (1, 2)))
 
     for x in r
         Lold = L[x - 1]
@@ -51,7 +63,7 @@ function leftgauge!(
         ϵ[x] = norm(Lold - L[x])
     end
 
-    verbose && @info "\t error: $ϵ"
+    verbose && @info "MPS gauging error: $ϵ"
 
     while numiter < maxiter && max(ϵ...) > tol
         for x in r
@@ -64,7 +76,7 @@ function leftgauge!(
             ϵ[x] = norm(Lold - L[x])
         end
 
-        verbose && @info "\t error: $ϵ"
+        verbose && @info "MPS gauging error: $ϵ"
         numiter += 1
     end
     return AL, L, λ
@@ -94,10 +106,10 @@ end
 function leftdecomp!(AL, L, A::AbsTen{N,2}) where {N}
     # Overwrite AL
     mulbond!(AL, L, A)
-    AL_p = permute(AL, tuple(1:N..., N + 2)::NTuple{N + 1,Int}, (N + 1,))
+    AL_p = permute(AL, (tuple(1:N..., N + 2)::NTuple{N + 1,Int}, (N + 1,)))
     temp_AL, temp_L = leftorth!(AL_p)
-    permute!(AL, temp_AL, Tuple(1:N)::NTuple{N,Int}, (N + 2, N + 1))
-    permute!(L, temp_L, (), (2, 1))
+    permute!(AL, temp_AL, (Tuple(1:N)::NTuple{N,Int}, (N + 2, N + 1)))
+    permute!(L, temp_L, ((), (2, 1)))
     return AL, L
 end
 
@@ -160,7 +172,7 @@ function _tsvd(t)
     u, s, v = tsvd(t, (2,), (1,))
     up = permute(u, (), (2, 1))
     sp = permute(s, (), (2, 1))
-    vp = permute(s, (), (2, 1))
+    vp = permute(v, (), (2, 1))
     return up, sp, vp
 end
 
@@ -203,10 +215,4 @@ function multi_transfer(A::AbstractArray, AL::AbstractArray)
     end
     # T = T / norm(T)
     return T
-end
-
-function lgsolve(x, T)
-    y = similar(x)
-    @tensoropt y[ur dr] = x[ul dl] * T[dr dl; ur ul]
-    return y
 end
