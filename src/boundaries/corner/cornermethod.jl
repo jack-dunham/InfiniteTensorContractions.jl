@@ -58,6 +58,9 @@ struct CornerMethodTensors{C<:Corners,E<:Edges,P<:Projectors,N<:AbstractNetwork}
     network::N
 end
 
+corners(t::CornerMethodTensors) = t.corners
+edges(t::CornerMethodTensors) = t.edges
+
 function TensorKit.scalartype(::Type{<:CornerMethodTensors{C,E}}) where {C,E}
     return promote_type(scalartype(C), scalartype(E))
 end
@@ -68,6 +71,9 @@ struct CornerMethodRuntime{T<:CornerMethodTensors,S<:CornerSingularValues} <:
     permuted::T
     svals::S
 end
+
+corners(t::CornerMethodRuntime) = corners(t.primary)
+edges(t::CornerMethodRuntime) = edges(t.primary)
 
 TensorKit.scalartype(::Type{<:CornerMethodRuntime{T}}) where {T} = scalartype(T)
 
