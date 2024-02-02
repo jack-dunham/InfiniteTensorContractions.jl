@@ -295,7 +295,7 @@ function testctmrg(data_func; T=Float64)
 
         cb = (st, args...) -> println(contract(st.tensors, b2) ./ contract(st.tensors, b1))
 
-        state = newproblem(alg, b1)#; callback=cb)
+        state = newcontraction(alg, b1)#; callback=cb)
 
         did_converge = false
 

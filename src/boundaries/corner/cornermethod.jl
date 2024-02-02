@@ -75,7 +75,7 @@ TensorKit.scalartype(::Type{<:CornerMethodRuntime{T}}) where {T} = scalartype(T)
 chispace(c::Corners) = domain(c[1][1, 1])[1]
 chispace(c::CornerMethodTensors) = chispace(c.corners)
 
-function step!(problem::ProblemState{<:AbstractCornerMethod})
+function step!(problem::InfiniteContraction{<:AbstractCornerMethod})
     fpcm = dofpcm(problem.algorithm)
     error = step!(fpcm, problem)
     return error

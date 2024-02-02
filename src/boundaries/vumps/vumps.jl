@@ -76,7 +76,7 @@ function initialize(algorithm::VUMPS, network)
     return VUMPSRuntime(boundary_mps, fixed_points, svals)
 end
 
-function step!(problem::ProblemState{<:VUMPS})
+function step!(problem::InfiniteContraction{<:VUMPS})
     return step!(problem.runtime, problem.network, problem.algorithm)
 end
 

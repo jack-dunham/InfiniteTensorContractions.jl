@@ -11,8 +11,9 @@ export ITC
 export AbstractUnitCellGeometry
 export AbstractUnitCell
 
-export AbstractProblemState
 export AbstractBoundaryAlgorithm 
+# InfiniteContraction
+export InfiniteContraction
 
 export Square
 export UnitCell

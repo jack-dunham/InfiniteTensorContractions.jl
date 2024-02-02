@@ -1,15 +1,14 @@
-abstract type AbstractProblemState end
 abstract type AbstractAlgorithm end
 abstract type AbstractRuntime end
 
 """
-    ProblemState{Alg, Net, Run, Out} <: AbstractProblemState
+    InfiniteContraction{Alg, Net, Run, Out} <: AbstractProblemState
 
 Concrete struct representing the state of a contraction algorithm of type `Alg` used to 
 contract a network of type `Net` with runtime tensors of type `Run`. If a callback is 
 provided, any returned data is stored in an instance of type `Out`. Note, avoid 
 constructing this object directly, instead use the function `newproblem` to construct a 
-a new instance of `ProblemState`.
+a new instance of `InfiniteContraction`.
 
 # Fields
 - `algorithm::Alg`: the contraction algorithm to be used
@@ -20,7 +19,7 @@ a new instance of `ProblemState`.
 - `verbose::Bool`: if `false`, will surpress top-level information about algorithm progress
 - `initialruntime::Run`: initial state of the runtime tensors if stored
 """
-struct ProblemState{Alg,Net,Run,Out} <: AbstractProblemState
+struct InfiniteContraction{Alg,Net,Run,Out}
     algorithm::Alg
     network::Net
     runtime::Run
@@ -28,7 +27,7 @@ struct ProblemState{Alg,Net,Run,Out} <: AbstractProblemState
     callback::Callback{Out}
     verbose::Bool
     initialruntime::Run
-    function ProblemState(
+    function InfiniteContraction(
         algorithm::Alg,
         network::Net,
         runtime::Run,
@@ -42,7 +41,7 @@ struct ProblemState{Alg,Net,Run,Out} <: AbstractProblemState
             algorithm, network, runtime, info, callback, verbose, initialruntime
         )
     end
-    function ProblemState(
+    function InfiniteContraction(
         algorithm::Alg,
         network::Net,
         runtime::Run,
@@ -56,11 +55,10 @@ struct ProblemState{Alg,Net,Run,Out} <: AbstractProblemState
 end
 
 """
-    newproblem(algorithm, network, [initial_tensors]; kwargs...)
-    newproblem(network, [initial_tensors]; algorithm, kwargs...)
+    newcontraction(algorithm, network, [initial_tensors]; kwargs...)
 
-Initialize an instance of a `ProblemState` to contract network of tensors `network` using 
-algorithm `algorithm`. 
+Initialize an instance of a `InfiniteContraction` to contract network of tensors 
+`network` using algorithm `algorithm`. 
 
 # Arguments
 - `network::AbstractNetwork`: the unit cell of tensors to be contracted
@@ -78,12 +76,12 @@ algorithm `algorithm`.
 - `ProblemState{Alg,...}`: problem state instancecorresponding to the supplied tensors 
     and parameters
 """
-function newproblem(algorithm, network; kwargs...)
+function newcontraction(algorithm, network; kwargs...)
     initial_runtime = initialize(algorithm, network)
-    return newproblem(algorithm, network, initial_runtime; kwargs...)
+    return newcontraction(algorithm, network, initial_runtime; kwargs...)
 end
 
-function newproblem(
+function newcontraction(
     algorithm,
     network,
     initial_runtime;
@@ -95,15 +93,15 @@ function newproblem(
 
     if store_initial
         initial_copy = deepcopy(initial_runtime)
-        return ProblemState(
+        return InfiniteContraction(
             algorithm, network, initial_runtime, info, callback, verbose, initial_copy
         )
     else
-        return ProblemState(algorithm, network, initial_runtime, info, callback, verbose)
+        return InfiniteContraction(algorithm, network, initial_runtime, info, callback, verbose)
     end
 end
 
-function _run!(problem::ProblemState)
+function _run!(problem::InfiniteContraction)
     callback = problem.callback
     info = problem.info
     alg = problem.algorithm
@@ -150,7 +148,7 @@ Calculate the contraction tensors required to contract `problem.network` using
 `problem.algorithm`. Returns mutated `problem`. Use `run` for a non-mutating 
 version of the same function.
 """
-function run!(problem::ProblemState)
+function run!(problem::InfiniteContraction)
     if problem.info.finished == true
         println(
             "Problem has reached termination according to parameters set. Use `forcerun!`, 
@@ -166,7 +164,7 @@ end
 
 Allow `problem` to continue past the termination criteria.
 """
-function continue!(problem::ProblemState)
+function continue!(problem::InfiniteContraction)
     problem.info.finished = false
     return problem
 end
@@ -176,7 +174,7 @@ end
 
 Reset the convergence info of `problem`.
 """
-function reset!(problem::ProblemState)
+function reset!(problem::InfiniteContraction)
     continue!(problem)
     problem.info.converged = false
     problem.info.error = Inf
@@ -188,8 +186,8 @@ end
 
 Restart the algorithm entirely, returning the tensors to their initial state.
 """
-function restart!(problem::ProblemState)
     if isdefined(problem, :initial_tensors)
+function restart!(problem::InfiniteContraction)
         reset!(problem)
         deepcopy!(problem.runtime, problem.initialruntime)
     else
@@ -205,7 +203,7 @@ end
 
 Force the algorithm to continue. Equivalent to calling `continue!` followed by `run!`.
 """
-function forcerun!(problem::ProblemState)
+function forcerun!(problem::InfiniteContraction)
     continue!(problem)
     run!(problem)
     return problem

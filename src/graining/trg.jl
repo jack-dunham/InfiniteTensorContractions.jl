@@ -201,7 +201,7 @@ function trgstep!(runtime::TRGRuntime, trunc; ramping=true)
     return traces, allconv
 end
 
-function step!(problem::ProblemState{<:TRG})
+function step!(problem::InfiniteContraction{<:TRG})
     runtime = problem.runtime
     alg = problem.algorithm
 
