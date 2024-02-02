@@ -2,28 +2,45 @@ module InfiniteTensorContractions
 const ITC = InfiniteTensorContractions
 
 using CircularArrays
+using KrylovKit
 using LinearAlgebra
 using TensorKit
-using KrylovKit
 
 export ITC
 
 export AbstractUnitCellGeometry
 export AbstractUnitCell
 
-export AbstractBoundaryAlgorithm 
 # InfiniteContraction
 export InfiniteContraction
+
+# ABSTRACT RUNTIMES
+export AbstractRuntime
+export AbstractBoundaryRuntime, AbstractGrainingRuntime
+
+# ABSTRACT ALGORITHMS
+export AbstractAlgorithm
+export AbstractBoundaryAlgorithm, AbstractGrainingAlgorithm
 
 export Square
 export UnitCell
 export TensorPair, bondspace, swapaxes, invertaxes
 
+# ALGORITHMS
 export VUMPS, CTMRG, TRG
-export VUMPSRuntime, MPS, FixedPoints
-export CornerMethodTensors, Corners, Edges
 
-export newproblem, initialize, run!, run, contract
+# VUMPS
+export VUMPSRuntime, MPS, FixedPoints
+
+# CORNERS
+export CornerMethodTensors, CornerMethodRuntime, Corners, Edges
+export corners, edges
+
+export getboundary
+
+
+# INTERFACE
+export newcontraction, initialize, run!, run, contract
 
 # No deps
 include("convergenceinfo.jl")
@@ -37,7 +54,6 @@ include("networks.jl")
 include("contract.jl")
 
 include("boundaries/abstractboundary.jl")
-
 # VUMPS
 include("boundaries/vumps/abstractmps.jl")
 include("boundaries/vumps/mpsgauge.jl")
@@ -60,7 +76,7 @@ include("boundaries/corner/biorth.jl")
 
 include("boundaries/corner/hybrid.jl")
 
-# Graining
+# GRAINING
 include("graining/abstractgraining.jl")
 include("graining/trg.jl")
 
