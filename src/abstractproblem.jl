@@ -186,8 +186,8 @@ end
 
 Restart the algorithm entirely, returning the tensors to their initial state.
 """
-    if isdefined(problem, :initial_tensors)
 function restart!(problem::InfiniteContraction)
+    if true #isdefined(problem, :initial_tensors)
         reset!(problem)
         deepcopy!(problem.runtime, problem.initialruntime)
     else
