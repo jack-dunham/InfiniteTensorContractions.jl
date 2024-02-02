@@ -86,8 +86,17 @@ function hcapply!(
     return hc
 end
 
-function fixed_point_norm(cd, cu, fl, fr)
+function fixed_point_norm(
+    cd::C, cu::C, fl::F, fr::F
+) where {S,C<:AbstractTensorMap{S,0,2},F<:AbstractTensorMap{S,1,2}}
     @tensoropt n = cu[ur ul] * fl[m; ul dl] * fr[m; ur dr] * conj(cd[dr dl])
+    return n
+end
+
+function fixed_point_norm(
+    cd::C, cu::C, fl::F, fr::F
+) where {S,C<:AbstractTensorMap{S,0,2},F<:AbstractTensorMap{S,2,2}}
+    @tensoropt n = cu[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr] * conj(cd[dr dl])
     return n
 end
 # function normalize(cd, cu, fl, fr)
