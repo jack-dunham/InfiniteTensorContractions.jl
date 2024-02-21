@@ -179,8 +179,24 @@ function reset!(problem::InfiniteContraction)
     problem.info.converged = false
     problem.info.error = Inf
     problem.info.iterations = 0
+    reset!(problem.runtime, problem.network)
     return problem
 end
+
+"""
+    recycle!(problem::ProblemState)
+
+Reset the convergence info of `problem`.
+"""
+function recycle!(problem::InfiniteContraction, network)
+    continue!(problem)
+    problem.info.converged = false
+    problem.info.error = Inf
+    problem.info.iterations = 0
+    reset!(problem.runtime, network)
+    return problem
+end
+
 """
     restart!(problem::ProblemState)
 

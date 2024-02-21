@@ -11,6 +11,26 @@ function initialize(algorithm::AbstractCornerMethod, network; kwargs...)
     return CornerMethodRuntime(primary_tensors, permuted_tensors, svals)
 end
 
+reset!(runtime::CornerMethodRuntime, network) = updatenetwork!(runtime, network)
+
+function updatenetwork!(runtime::CornerMethodRuntime, network)
+    updatenetwork!(runtime.primary, network)
+    updatenetwork!(runtime.permuted, permutedims(swapaxes(network)))
+    map(runtime.svals) do sval
+        broadcast(sval) do s
+            one!(s)
+        end
+    end
+    return runtime
+end
+
+function updatenetwork!(tensors::CornerMethodTensors, network)
+    foreach(tensors.network, network) do t1, t2
+        copy!(t1, t2)
+    end
+    return tensors
+end
+
 function inittensors(network, alg::AbstractCornerMethod; randinit=alg.randinit)
     # Convert the bond dimension into an IndexSpace
     chi = dimtospace(spacetype(network), alg.bonddim)

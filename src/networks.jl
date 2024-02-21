@@ -26,6 +26,12 @@ end
 
 TensorPair(t::TensorMap) = TensorPair(t, t)
 
+function Base.copy!(t1::TensorPair, t2::TensorPair)
+    copy!(t1.top, t2.top)
+    copy!(t1.bot, t2.bot)
+    return t1
+end
+
 const AbstractDoubleLayerNetwork{G,ElType<:TensorPair,A} = AbstractUnitCell{G,ElType,A}
 
 top(tp::TensorPair) = tp.top

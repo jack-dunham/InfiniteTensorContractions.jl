@@ -42,6 +42,11 @@ struct VUMPSRuntime{
     svals::SType
 end
 
+function reset!(runtime::VUMPSRuntime, network)
+    fixedpoints!(runtime.fixedpoints, runtime.mps, network)
+    return runtime
+end
+
 contraction_boundary_type(::VUMPSRuntime) = VUMPS
 
 function Base.similar(vumps::VUMPSRuntime)
