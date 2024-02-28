@@ -72,46 +72,40 @@ end
 ## CORNERS 
 
 function initcorners(network, chi::S; randinit::Bool=false) where {S<:IndexSpace}
-    corner_tensors = map((1:4...,)) do i
-        broadcast(network) do site
-            return init_single_corner(site, chi, i)
+
+    corner_tensors = map(1:4) do i
+        chis = (chi, chi', chi, chi')
+
+        corners = broadcast(network) do site
+            cout = TensorMap(undef, scalartype(site), one(S), chis[i] * chis[i])
+            if randinit
+                randnt!(cout)
+            else
+                tenp = rotate(site, -i + 1)
+                init_single_corner!(cout, tenp)
+            end
+            return cout
         end
+
+        return corners
     end
 
-    # Randomize in place 
-    if randinit
-        map(corner_tensors) do Ci
-            broadcast(randnt!, Ci)
-        end
-    end
-
-    corners = Corners(corner_tensors)
+    corners = Corners(corner_tensors...)
 
     return randomize_if_zero!(corners)
 end
-function init_single_corner(ten::AbstractTensorMap, chi, i)
-    chis = tcircshift((chi, chi', chi, chi'), -i + 1)
+function init_single_corner!(cout, ten::AbstractTensorMap)
 
-    tenp = rotate(ten, -i + 1)
+    d = bondspace(ten)
 
-    d = bondspace(tenp)
-
-    u1 = get_embedding_isometry(d[1], chis[1])
-    u2 = get_embedding_isometry(d[2], chis[1])
+    u1 = get_embedding_isometry(d[1], domain(cout)[1])
+    u2 = get_embedding_isometry(d[2], domain(cout)[2])
     u3 = get_removal_isometry(d[3])
     u4 = get_removal_isometry(d[4])
 
-    corner = init_single_corner(tenp, u1, u2, u3, u4)
+    corner = init_single_corner!(cout, ten, u1, u2, u3, u4)
 
     return corner
-end
-
-function init_single_corner(tensor::AbstractTensorMap, ue, us, uw, un)
-    s_o1 = domain(ue)
-    s_o2 = domain(us)
-    c = TensorMap(undef, scalartype(tensor), one(s_o1), s_o1 * s_o2)
-    init_single_corner!(c, tensor, ue, us, uw, un)
-    return c
 end
 
 function init_single_corner!(t_dst, t_src::TensorPair, ue, us, uw, un)
@@ -157,47 +151,44 @@ end
 ## EDGES
 
 function initedges(network, chi::IndexSpace; randinit::Bool=false)
-    edge_tensors = map((1:4...,)) do i
-        broadcast(network) do site
-            return init_single_edge(site, chi, i)
+    edge_tensors = map(1:4) do i
+        edges = broadcast(network) do site
+
+            tenp = rotate(site, -i + 1)
+
+            # Need north bond of tensor below (swapped south bond)
+            d = swap(bondspace(tenp)[2])
+
+            eout = TensorMap(undef, scalartype(site), d, chi * chi')
+
+            if randinit
+                randnt!(eout)
+            else
+                init_single_edge!(eout, tenp)
+            end
+
+            return eout
         end
+        return edges
     end
 
-    # Randomize in place 
-    if randinit
-        map(edge_tensors) do Ei
-            broadcast(randnt!, Ei)
-        end
-    end
-
-    edges = Edges(edge_tensors)
+    edges = Edges(edge_tensors...)
 
     return randomize_if_zero!(edges)
 end
 
-function init_single_edge(tensor::AbstractTensorMap, chi, i)
-    tenp = rotate(tensor, -i + 1)
+function init_single_edge!(eout, tenp)
 
     d = bondspace(tenp)
 
-    u1 = get_embedding_isometry(d[1], chi)
+    u1 = get_embedding_isometry(d[1], domain(eout)[1])
     u2 = isometry(swap(d[2]), swap(d[2]))
-    u3 = get_embedding_isometry(d[3], chi')
+    u3 = get_embedding_isometry(d[3], domain(eout)[2])
     u4 = get_removal_isometry(d[4])
 
-    edge = init_single_edge(tenp, u1, u2, u3, u4)
+    edge = init_single_edge!(eout, tenp, u1, u2, u3, u4)
 
     return edge
-end
-
-function init_single_edge(tensor, ue, us, uw, un)
-    s_o1 = domain(ue)
-    s_o2 = domain(uw)
-    d = swap(bondspace(tensor)[2]) # swapped south bond (north bond of tensor below)
-
-    t_dst = TensorMap(undef, scalartype(tensor), d, s_o1 * s_o2)
-
-    return init_single_edge!(t_dst, tensor, ue, us, uw, un)
 end
 
 function init_single_edge!(t_dst, t_src::TensorPair, ue, us, uw, un)
