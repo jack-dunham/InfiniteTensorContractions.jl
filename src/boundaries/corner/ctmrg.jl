@@ -299,7 +299,7 @@ function testctmrg(data_func; T=Float64)
 
         did_converge = false
 
-        run!(state)
+        runcontraction!(state)
 
         Z = contract(state.runtime.primary, b1)
         magn = contract(state.runtime.primary, b2) ./ Z

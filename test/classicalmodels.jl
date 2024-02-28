@@ -83,7 +83,7 @@ end
             rt = @constinferred(initialize(alg, zbulk))
             st = @constinferred(newproblem(alg, zbulk, rt))
 
-            run!(st)
+            runcontraction!(st)
 
             z_val = @constinferred(contract(st.runtime, zbulk))
             m_val = contract(st.runtime, mtbulk) ./ z_val
@@ -104,7 +104,7 @@ end
             rt = @constinferred(initialize(alg, zbulk))
             st = @constinferred(newproblem(alg, zbulk, rt))
 
-            run!(st)
+            runcontraction!(st)
 
             z_val = st.runtime.cumsum
 

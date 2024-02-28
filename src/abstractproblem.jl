@@ -135,24 +135,24 @@ function _run!(problem::InfiniteContraction)
 end
 
 """
-    run(problem::ProblemState)
+    runcontraction(problem::ProblemState)
 
-Equivalent to `run!(deepcopy(problem))`.
+Equivalent to `runcontraction!(deepcopy(problem))`.
 """
-run(problem) = run!(deepcopy(problem))
+runcontraction(problem) = runcontraction!(deepcopy(problem))
 
 """
-    run!(problem::ProblemState)
+    runcontraction!(problem::ProblemState)
 
 Calculate the contraction tensors required to contract `problem.network` using 
-`problem.algorithm`. Returns mutated `problem`. Use `run` for a non-mutating 
+`problem.algorithm`. Returns mutated `problem`. Use `runcontraction` for a non-mutating 
 version of the same function.
 """
-function run!(problem::InfiniteContraction)
+function runcontraction!(problem::InfiniteContraction)
     if problem.info.finished == true
         println(
             "Problem has reached termination according to parameters set. Use `forcerun!`, 
-                or `continue!` followed by `run!` to ignore this and continue anyway."
+                or `continue!` followed by `runcontraction!` to ignore this and continue anyway."
         )
     else
         _run!(problem)
@@ -221,6 +221,6 @@ Force the algorithm to continue. Equivalent to calling `continue!` followed by `
 """
 function forcerun!(problem::InfiniteContraction)
     continue!(problem)
-    run!(problem)
+    runcontraction!(problem)
     return problem
 end

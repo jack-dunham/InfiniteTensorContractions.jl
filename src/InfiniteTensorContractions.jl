@@ -40,7 +40,7 @@ export getboundary
 
 
 # INTERFACE
-export newcontraction, initialize, run!, run, contract
+export newcontraction, initialize, runcontraction!, runcontraction, contract
 
 # No deps
 include("convergenceinfo.jl")
