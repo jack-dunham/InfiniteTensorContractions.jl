@@ -92,10 +92,10 @@ function getboundary(corners::Corners, i...)
 
     (x, y) = to_indices(C1.data, i)
 
-    x1 = firstindex(x)
-    y1 = firstindex(y)
-    x2 = lastindex(x)
-    y2 = lastindex(y)
+    x1 = first(x)
+    y1 = first(y)
+    x2 = last(x)
+    y2 = last(y)
 
     c1 = C1[x1 - 1, y1 - 1]
     c2 = C2[x2 + 1, y1 - 1]
@@ -110,10 +110,10 @@ function getboundary(edges::Edges, i...)
 
     (x, y) = to_indices(T1.data, i)
 
-    x1 = firstindex(x)
-    y1 = firstindex(y)
-    x2 = lastindex(x)
-    y2 = lastindex(y)
+    x1 = first(x)
+    y1 = first(y)
+    x2 = last(x)
+    y2 = last(y)
 
     @views begin
         t1s = T1[x1:x2, y1 - 1]
