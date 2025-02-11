@@ -30,7 +30,7 @@ export TensorPair, bondspace, swapaxes, invertaxes
 export VUMPS, CTMRG, TRG
 
 # VUMPS
-export VUMPSRuntime, MPS, FixedPoints
+export VUMPSRuntime, MPS, FixedPoints, TransferMatrix
 
 # CORNERS
 export CornerMethodTensors, CornerMethodRuntime, Corners, Edges
