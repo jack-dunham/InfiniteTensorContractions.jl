@@ -59,7 +59,7 @@ end
 
 function _projectedge!(
     t_dst::T, t_src::T, ma::MA, mb::MB, u::UV, v::UV
-) where {T<:AbsTen{2,2},MA<:AbsTen{1,4},MB<:AbsTen{2,4},UV<:AbsTen{3,1}}
+) where {T<:AbsTen{2,2},MA<:AbsTen{1,4},MB<:AbsTen{4,1},UV<:AbsTen{3,1}}
     @tensoropt (
         k => 2,
         D1 => D,

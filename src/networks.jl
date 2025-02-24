@@ -58,7 +58,7 @@ Base.firstindex(ct::CompositeTensor) = 1
 Base.lastindex(ct::CompositeTensor) = length(ct)
 
 function Base.iterate(ct::CompositeTensor, state=1)
-    state > length(ct) && nothing
+    state > length(ct) && return nothing
     return getindex(ct, state), state + 1
 end
 

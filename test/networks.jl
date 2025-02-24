@@ -8,12 +8,10 @@
 
     t = TensorMap(rand, p * p', e * s * w' * n')
 
-    @test virtualspace(t) == domain(t)
+    @test swapaxes(t) == permute(t, ((1, 2), (4, 3, 6, 5)))
+    @test invertaxes(t) == permute(t, ((1, 2), (5, 6, 3, 4)))
 
-    @test swapaxes(t) == permute(t, (4, 3, 6, 5))
-    @test invertaxes(t) == permutedom(t, (5, 6, 3, 4))
-
-    ct2 = CompositeTensor(t, t')
+    ct = CompositeTensor(t, t')
 
     @test ct[1] == ct[2]'
     @test @constinferred(first(ct)) === parent(@constinferred(last(ct)))
@@ -23,6 +21,6 @@
 
     @test virtualspace(ct, 1) == e * e'
     @test virtualspace(ct, 2) == s * s'
-    @test virtualspace(ct, 3) == w' * n
+    @test virtualspace(ct, 3) == w' * w
     @test virtualspace(ct, 4) == n' * n
 end
