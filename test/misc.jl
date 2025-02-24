@@ -14,7 +14,7 @@
     p2 = TensorMap(rand, ComplexF64, d, dom)
     p3 = TensorMap(rand, ComplexF64, d * d', dom)
 
-    tp = TensorPair(p3, p3)
+    tp = CompositeTensor(p3, p3')
 
     test_t = (p1, p2, p3)
 
@@ -55,7 +55,7 @@
         t = TensorMap(rand, ComplexF64, one(d), dom)
         p = TensorMap(rand, ComplexF64, cod, dom)
 
-        tp = TensorPair(p, p)
+        tp = CompositeTensor(p, p')
 
         up = UnitCell([p p; p p])
         ut = UnitCell([t t; t t])

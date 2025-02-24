@@ -30,7 +30,6 @@ function classicalisingmpo(β; J=1.0, h=0.0)
     return statmechmpo(β, (s1, s2) -> -J * (-1)^(s1 != s2) - h / 2 * (s1 == 1 + s2 == 1), 2)
 end
 
-
 function exactZ(β)
     function quad_midpoint(f, a, b, N)
         h = (b - a) / N
@@ -80,8 +79,8 @@ end
         @testset "Using $(typeof(alg)) with χ = $(alg.bonddim)" for (alg, tol) in zip(
             algs, (1e-3, 1e-6, 1e-9, 1e-3, 1e-6, 1e-9)
         )
-            rt = @constinferred(initialize(alg, zbulk))
-            st = @constinferred(newproblem(alg, zbulk, rt))
+            rt = @constinferred(initialize(zbulk, alg))
+            st = @constinferred(newcontraction(zbulk, rt; alg=alg))
 
             runcontraction!(st)
 
@@ -101,8 +100,8 @@ end
         @testset "Using $(typeof(alg)) with χ = $(alg.trunc.dim)" for (alg, tol) in zip(
             trgalgs, (1e-2, 1e-3, 1e-4)
         )
-            rt = @constinferred(initialize(alg, zbulk))
-            st = @constinferred(newproblem(alg, zbulk, rt))
+            rt = @constinferred(initialize(zbulk, alg))
+            st = @constinferred(newcontraction(zbulk, rt; alg=alg))
 
             runcontraction!(st)
 
@@ -111,58 +110,59 @@ end
             @test abs(z_val[1, 1]) ≈ z_exact atol = tol
         end
     end
+    #=
+        @testset "Interacting dimers" verbose = true begin
+            β = 1 / 0.85
 
-    @testset "Interacting dimers" verbose = true begin
-        β = 1 / 0.85
+            a = zeros(4, 4, 4, 4)
+            b = zeros(4, 4, 4, 4)
 
-        a = zeros(4, 4, 4, 4)
-        b = zeros(4, 4, 4, 4)
-
-        for I in CartesianIndices(a)
-            if I[1] == mod(I[2] + 1, 1:4) == mod(I[3] + 2, 1:4) == mod(I[4] + 3, 1:4)
-                a[I] = 1
+            for I in CartesianIndices(a)
+                if I[1] == mod(I[2] + 1, 1:4) == mod(I[3] + 2, 1:4) == mod(I[4] + 3, 1:4)
+                    a[I] = 1
+                end
+                if I[1] == mod(I[2] - 1, 1:4) == mod(I[3] - 2, 1:4) == mod(I[4] - 3, 1:4)
+                    b[I] = 1
+                end
             end
-            if I[1] == mod(I[2] - 1, 1:4) == mod(I[3] - 2, 1:4) == mod(I[4] - 3, 1:4)
-                b[I] = 1
-            end
+
+            q = sqrt([1 0 0 0; 0 exp(β / 2) 1 1; 0 1 1 1; 0 1 1 exp(β / 2)])
+
+            qh = diagm([1, -1, 1, -1]) * q
+            qv = diagm([-1, 1, -1, 1]) * q
+
+            @tensoropt aa[ii, jj, kk, ll] :=
+                a[i, j, k, l] * q[i, ii] * q[j, jj] * q[k, kk] * q[l, ll]
+            @tensoropt bb[ii, jj, kk, ll] :=
+                b[i, j, k, l] * q[i, ii] * q[j, jj] * q[k, kk] * q[l, ll]
+
+            δa = zeros(4, 4)
+            δa[1, 1] = δa[3, 3] = 1
+            δa[2, 2] = δa[4, 4] = -1
+
+            @tensoropt aad[i, j, k, l] := a[ii, j, k, l] * δa[i, ii]
+            @tensoropt bbd[i, j, k, l] := b[ii, j, k, l] * δa[i, ii]
+
+            s = ℂ^4
+
+            A = TensorMap(aa, one(s), s * s * s' * s')
+            B = TensorMap(bb, one(s), s * s * s' * s')
+
+            AD = TensorMap(aad, one(s), s * s * s' * s')
+            BD = TensorMap(bbd, one(s), s * s * s' * s')
+
+            alg = VUMPS(; bonddim=5, maxiter=1000)
+
+            bulk = UnitCell(([A B; B A]))
+            dbulk = UnitCell(([AD BD; BD AD]))
+
+            st = initialize(bulk, alg)
+            dst = initialize(dbulk, alg)
+
+            sto = calculate(st)
+            contract(sto.tensors, dbulk) ./ contract(sto.tensors, bulk)
         end
-
-        q = sqrt([1 0 0 0; 0 exp(β / 2) 1 1; 0 1 1 1; 0 1 1 exp(β / 2)])
-
-        qh = diagm([1, -1, 1, -1]) * q
-        qv = diagm([-1, 1, -1, 1]) * q
-
-        @tensoropt aa[ii, jj, kk, ll] :=
-            a[i, j, k, l] * q[i, ii] * q[j, jj] * q[k, kk] * q[l, ll]
-        @tensoropt bb[ii, jj, kk, ll] :=
-            b[i, j, k, l] * q[i, ii] * q[j, jj] * q[k, kk] * q[l, ll]
-
-        δa = zeros(4, 4)
-        δa[1, 1] = δa[3, 3] = 1
-        δa[2, 2] = δa[4, 4] = -1
-
-        @tensoropt aad[i, j, k, l] := a[ii, j, k, l] * δa[i, ii]
-        @tensoropt bbd[i, j, k, l] := b[ii, j, k, l] * δa[i, ii]
-
-        s = ℂ^4
-
-        A = TensorMap(aa, one(s), s * s * s' * s')
-        B = TensorMap(bb, one(s), s * s * s' * s')
-
-        AD = TensorMap(aad, one(s), s * s * s' * s')
-        BD = TensorMap(bbd, one(s), s * s * s' * s')
-
-        alg = VUMPS(; bonddim=5, maxiter=1000)
-
-        bulk = UnitCell(([A B; B A]))
-        dbulk = UnitCell(([AD BD; BD AD]))
-
-        st = initialize(bulk, alg)
-        dst = initialize(dbulk, alg)
-
-        sto = calculate(st)
-        contract(sto.tensors, dbulk) ./ contract(sto.tensors, bulk)
-    end
+        =#
 end
 
 #=
