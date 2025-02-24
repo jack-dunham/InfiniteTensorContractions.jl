@@ -7,9 +7,9 @@ function lgsolve(x, T)
 end
 
 function leftgauge!(
-    AL::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}},
-    L::AbstractUnitCell{G,<:AbstractTensorMap{S,0,2}},
-    A::AbstractUnitCell{G,<:AbstractTensorMap{S,N,2}};
+    AL::AbstractUnitCell{G,<:AbsTen{N,2,S}},
+    L::AbstractUnitCell{G,<:AbsTen{0,2,S}},
+    A::AbstractUnitCell{G,<:AbsTen{N,2,S}};
     tol=1e-14,
     maxiter=100,
     verbose=false,
@@ -83,9 +83,9 @@ function leftgauge!(
 end
 
 function rightgauge!(
-    AR::AbstractUnitCell{U,<:AbstractTensorMap{S,N,2}},
-    R::AbstractUnitCell{U,<:AbstractTensorMap{S,0,2}},
-    A::AbstractUnitCell{U,<:AbstractTensorMap{S,N,2}};
+    AR::AbstractUnitCell{U,<:AbsTen{N,2,S}},
+    R::AbstractUnitCell{U,<:AbsTen{0,2,S}},
+    A::AbstractUnitCell{U,<:AbsTen{N,2,S}};
     kwargs...,
 ) where {U,S,N}
     # Permute left and right virtual bonds bonds
@@ -178,23 +178,19 @@ end
 
 # Vectorised form of a gauge transformation. That is, A[x] <- U'[x-1]*A[x]*U[x]
 function gauge!(
-    A::AbstractUnitCell{G,<:AbstractTensorMap{S}},
-    U::AbstractUnitCell{G,<:AbstractTensorMap{S,0,2}},
+    A::AbstractUnitCell{G,<:AbstractTensorMap{<:Number,S}},
+    U::AbstractUnitCell{G,<:AbstractTensorMap{<:Number,S,0,2}},
 ) where {G,S}
     _A = centraltensor(A, U)
     centraltensor!(A, adjoint.(U), _A)
     return A
 end
 
-function mps_transfer(
-    a::AbstractTensorMap{S,2,2}, al::AbstractTensorMap{S,2,2}
-) where {S<:IndexSpace}
+function mps_transfer(a::AbsTen{2,2}, al::AbsTen{2,2})
     @tensoropt T[dr dl; ur ul] := a[p1 p2; ur ul] * (al')[dr dl; p1 p2]
     return T
 end
-function mps_transfer(
-    a::AbstractTensorMap{S,1,2}, al::AbstractTensorMap{S,1,2}
-) where {S<:IndexSpace}
+function mps_transfer(a::AbsTen{1,2}, al::AbsTen{1,2})
     @tensoropt T[dr dl; ur ul] := a[p1; ur ul] * (al')[dr dl; p1]
     return T
 end

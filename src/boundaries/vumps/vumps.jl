@@ -59,12 +59,12 @@ function TensorKit.scalartype(v::VUMPSRuntime)
     return promote_type(scalartype(v.mps), scalartype(v.fixedpoints))
 end
 
-function initialize(algorithm::VUMPS, network)
+function KrylovKit.initialize(network, alg::VUMPS)
     # D = @. getindex(domain(network), 4)
 
-    _, _, _, north_bonds = bondspace(network)
+    north_bonds = virtualspace(network, 4)
 
-    χ = dimtospace(spacetype(network), algorithm.bonddim)
+    χ = dimtospace(spacetype(network), alg.bonddim)
 
     chi = similar(north_bonds, typeof(χ))
 
@@ -72,10 +72,11 @@ function initialize(algorithm::VUMPS, network)
 
     boundary_mps = MPS(randn, scalartype(network), north_bonds, chi)
 
-    fixed_points = initfixedpoints(randn, boundary_mps, network)
+    fixed_points = FixedPoints(randn, boundary_mps, network)
 
     svals = broadcast(getbond(boundary_mps)) do bond
-        return tsvd(bond, (1,), (2,))[2]
+        _, s, _, info = tsvd(bond, (1,), (2,))
+        return s
     end
 
     return VUMPSRuntime(boundary_mps, fixed_points, svals)
@@ -129,8 +130,8 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M; ishermitian=forcehermitian(A, 
         # take mps[y], get mps[y].AC, send in mps[y].AC[x]
         # First solve for the new AC tensors.
         μ1s, ACs, _ = eigsolve(
-            z -> applyhac(z, (FL[x, :]), (FR[x, :]), (M[x, :])),
-            RecursiveVec((AC[x, :])...),
+            z -> applyhac(z, FL[x, :], FR[x, :], M[x, :]),
+            AC[x, :],
             1,
             :LM;
             ishermitian=ishermitian,
@@ -159,8 +160,8 @@ function vumpsupdate!(A::MPS, FP::FixedPoints, M; ishermitian=forcehermitian(A, 
 
         # A[mod(y - 1, ry)].AC[x] = ACs[1]
         μ0s, Cs, _ = eigsolve(
-            z -> applyhc(z, (FL[x + 1, :]), (FR[x, :])),
-            RecursiveVec((C[x, :])...),
+            z -> applyhc(z, FL[x + 1, :], FR[x, :]),
+            C[x, :],
             1,
             :LM;
             ishermitian=ishermitian,
@@ -194,20 +195,18 @@ end
 
 # EFFECTIVE HAMILTONIANS
 
-function applyhac(
-    z::RecursiveVec, FL::AbstractVector, FR::AbstractVector, M::AbstractVector
-)
-    rv = deepcopy(circshift([z.vecs...], -1))
+function applyhac(z, FL::AbstractVector, FR::AbstractVector, M::AbstractVector)
+    rv = map(copy, circshift(z, -1))
     applyhac!.(rv, z, FL, FR, M)
     rv = circshift(rv, 1)
-    return RecursiveVec(rv...)::typeof(z)
+    return rv
 end
 
-function applyhc(z::RecursiveVec, FL::AbstractVector, FR::AbstractVector)
-    rv = deepcopy(circshift([z.vecs...], -1))
+function applyhc(z, FL::AbstractVector, FR::AbstractVector)
+    rv = map(copy, circshift(z, -1))
     applyhc!.(rv, z, FL, FR)
     rv = circshift(rv, 1)
-    return RecursiveVec(rv...)::typeof(z)
+    return rv
 end
 
 # MPS UPDATE

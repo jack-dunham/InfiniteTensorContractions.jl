@@ -11,7 +11,7 @@ end
     verbose::Bool = true
 end
 
-function initialize(::TRG, network)
+function KrylovKit.initialize(network, ::TRG)
     nx, ny = size(network)
 
     Nx = lcm(2, nx)

@@ -1,8 +1,7 @@
-function initialize(algorithm::AbstractCornerMethod, network; kwargs...)
+function KrylovKit.initialize(network, algorithm::AbstractCornerMethod; kwargs...)
     if size(network) > (1, 1) && isa(algorithm, FPCM)
-        println(
-            "The FPCM for non-trivial unit cells is experimental and currently not working"
-        )
+        println("The FPCM for non-trivial unit cells is experimental 
+                    and may not give correct resultsworking")
     end
 
     primary_tensors = inittensors(network, algorithm; kwargs...)
@@ -72,12 +71,13 @@ end
 ## CORNERS 
 
 function initcorners(network, chi::S; randinit::Bool=false) where {S<:IndexSpace}
-
     corner_tensors = map(1:4) do i
         chis = (chi, chi', chi, chi')
 
         corners = broadcast(network) do site
-            cout = TensorMap(undef, scalartype(site), one(S), chis[i] * chis[i])
+            T = scalartype(network)
+            cout = TensorMap{T}(undef, one(S), chis[i] * chis[i])
+
             if randinit
                 randnt!(cout)
             else
@@ -95,8 +95,7 @@ function initcorners(network, chi::S; randinit::Bool=false) where {S<:IndexSpace
     return randomize_if_zero!(corners)
 end
 function init_single_corner!(cout, ten::AbstractTensorMap)
-
-    d = bondspace(ten)
+    d = virtualspace(ten)
 
     u1 = get_embedding_isometry(d[1], domain(cout)[1])
     u2 = get_embedding_isometry(d[2], domain(cout)[2])
@@ -108,24 +107,27 @@ function init_single_corner!(cout, ten::AbstractTensorMap)
     return corner
 end
 
-function init_single_corner!(t_dst, t_src::TensorPair, ue, us, uw, un)
-    return __init_single_corner!(t_dst, top(t_src), bot(t_src), ue, us, uw, un)
+function init_single_corner!(t_dst, t_src::CompositeTensor{2}, ue, us, uw, un)
+    top, bot = t_src
+    return __init_single_corner!(t_dst, top, bot, ue, us, uw, un)
 end
 function init_single_corner!(t_dst, t_src::TensorMap, ue, us, uw, un)
     return __init_single_corner!(t_dst, t_src, ue, us, uw, un)
 end
 
-function __init_single_corner!(t_dst, t_src::TensorMap{<:IndexSpace,0,4}, ue, us, uw, un)
+function __init_single_corner!(
+    t_dst, t_src::TensorMap{<:Number,<:IndexSpace,0,4}, ue, us, uw, un
+)
     @tensoropt t_dst[o1 o2] = t_src[e s w n] * ue[e; o1] * us[s; o2] * uw[w] * un[n]
     return t_dst
 end
 
 function __init_single_corner!(
-    t_dst, t1::T, t2::T, ue, us, uw, un
-) where {T<:TensorMap{<:IndexSpace,1,4}}
+    t_dst, t1::T1, t2::T2, ue, us, uw, un
+) where {T1<:AbsTen{1,4},T2<:AbsTen{4,1}}
     @tensoropt t_dst[o1 o2] =
         t1[k; e1 s1 w1 n1] *
-        (t2')[e2 s2 w2 n2; k] *
+        t2[e2 s2 w2 n2; k] *
         ue[e1 e2; o1] *
         us[s1 s2; o2] *
         uw[w1 w2] *
@@ -134,11 +136,11 @@ function __init_single_corner!(
 end
 
 function __init_single_corner!(
-    t_dst, t1::T, t2::T, ue, us, uw, un
-) where {T<:TensorMap{<:IndexSpace,2,4}}
+    t_dst, t1::T1, t2::T2, ue, us, uw, un
+) where {T1<:AbsTen{2,4},T2<:AbsTen{4,2}}
     @tensoropt t_dst[o1 o2] =
         t1[k b; e1 s1 w1 n1] *
-        (t2')[e2 s2 w2 n2; k b] *
+        t2[e2 s2 w2 n2; k b] *
         ue[e1 e2; o1] *
         us[s1 s2; o2] *
         uw[w1 w2] *
@@ -153,13 +155,14 @@ end
 function initedges(network, chi::IndexSpace; randinit::Bool=false)
     edge_tensors = map(1:4) do i
         edges = broadcast(network) do site
-
             tenp = rotate(site, -i + 1)
 
             # Need north bond of tensor below (swapped south bond)
-            d = swap(bondspace(tenp)[2])
+            d = swap(virtualspace(tenp)[2])
 
-            eout = TensorMap(undef, scalartype(site), d, chi * chi')
+            T = scalartype(site)
+
+            eout = TensorMap{T}(undef, d, chi * chi')
 
             if randinit
                 randnt!(eout)
@@ -178,8 +181,7 @@ function initedges(network, chi::IndexSpace; randinit::Bool=false)
 end
 
 function init_single_edge!(eout, tenp)
-
-    d = bondspace(tenp)
+    d = virtualspace(tenp)
 
     u1 = get_embedding_isometry(d[1], domain(eout)[1])
     u2 = isometry(swap(d[2]), swap(d[2]))
@@ -191,33 +193,34 @@ function init_single_edge!(eout, tenp)
     return edge
 end
 
-function init_single_edge!(t_dst, t_src::TensorPair, ue, us, uw, un)
-    return __init_single_edge!(t_dst, top(t_src), bot(t_src), ue, us, uw, un)
+function init_single_edge!(t_dst, t_src::CompositeTensor{2}, ue, us, uw, un)
+    top, bot = t_src
+    return __init_single_edge!(t_dst, top, bot, ue, us, uw, un)
 end
 function init_single_edge!(t_dst, t_src::TensorMap, ue, us, uw, un)
     return __init_single_edge!(t_dst, t_src, ue, us, uw, un)
 end
 
-function __init_single_edge!(t_dst, t_src::TensorMap{<:IndexSpace,0,4}, ue, us, uw, un)
+function __init_single_edge!(t_dst, t_src::AbsTen{0,4}, ue, us, uw, un)
     @tensoropt t_dst[ss; o1 o2] = t_src[e s w n] * ue[e; o1] * us[ss; s] * uw[w; o2] * un[n]
 end
 function __init_single_edge!(
-    t_dst, t1::T, t2::T, ue, us, uw, un
-) where {T<:TensorMap{<:IndexSpace,1,4}}
+    t_dst, t1::T1, t2::T2, ue, us, uw, un
+) where {T1<:AbsTen{1,4},T2<:AbsTen{4,1}}
     @tensoropt t_dst[ss1 ss2; o1 o2] =
         t1[k; e1 s1 w1 n1] *
-        (t2')[e2 s2 w2 n2; k] *
+        t2[e2 s2 w2 n2; k] *
         ue[e1 e2; o1] *
         us[ss1 ss2; s1 s2] *
         uw[w1 w2; o2] *
         un[n1 n2]
 end
 function __init_single_edge!(
-    t_dst, t1::T, t2::T, ue, us, uw, un
-) where {T<:TensorMap{<:IndexSpace,2,4}}
+    t_dst, t1::T1, t2::T2, ue, us, uw, un
+) where {T1<:AbsTen{2,4},T2<:AbsTen{4,2}}
     @tensoropt t_dst[ss1 ss2; o1 o2] =
         t1[k b; e1 s1 w1 n1] *
-        (t2')[e2 s2 w2 n2; k b] *
+        t2[e2 s2 w2 n2; k b] *
         ue[e1 e2; o1] *
         us[ss1 ss2; s1 s2] *
         uw[w1 w2; o2] *
@@ -229,7 +232,7 @@ end
 ## PROJECTORS
 
 function initprojectors(network, chi::IndexSpace)
-    _, south_bonds, _, north_bonds = bondspace(network)
+    _, south_bonds, _, north_bonds = virtualspace(network)
 
     T = scalartype(network)
 
@@ -243,7 +246,7 @@ end
 
 function construct_projector(T, chi, sitebonds, incr)
     rv = broadcast(circshift(sitebonds, incr)) do bonds
-        return TensorMap(undef, T, chi * bonds, chi)
+        return TensorMap{T}(undef, chi * bonds, chi)
     end
     return rv
 end

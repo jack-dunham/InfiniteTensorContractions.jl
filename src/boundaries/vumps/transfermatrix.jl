@@ -10,26 +10,16 @@ end
 
 const AbstractTransferMatrices{T<:TransferMatrix} = AbUnCe{T}
 
-# Get correct space for resulting F
-function rightspace(transfer::TransferMatrix{A,<:AbsTen{0,4}}) where {A}
-    dom = domain(transfer.above)[1] * domain(transfer.below)[1]'
-    cod = domain(transfer.middle)[1]'
-    return cod, dom
-end
-function leftspace(transfer::TransferMatrix{A,<:AbsTen{0,4}}) where {A}
-    dom = domain(transfer.above)[2] * domain(transfer.below)[2]'
-    cod = domain(transfer.middle)[3]'
+function rightspace(tm::TransferMatrix)
+    dom = domain(tm.above, 1) * domain(tm.below, 1)'
+    cod = mapadjoint(virtualspace(tm.middle, 1))
     return cod, dom
 end
 
-function rightspace(transfer::TransferMatrix{A,<:TensorPair}) where {A}
-    dom = domain(transfer.above)[1] * domain(transfer.below)[1]'
-    cod = domain(transfer.middle.top)[1]' * domain(transfer.middle.bot)[1]
-    return cod, dom
-end
-function leftspace(transfer::TransferMatrix{A,<:TensorPair}) where {A}
-    dom = domain(transfer.above)[2] * domain(transfer.below)[2]'
-    cod = domain(transfer.middle.top)[3]' * domain(transfer.middle.bot)[3]
+# This is the space that the new 
+function leftspace(tm::TransferMatrix)
+    dom = domain(tm.above, 2) * domain(tm.below, 2)'
+    cod = mapadjoint(virtualspace(tm.middle, 3))
     return cod, dom
 end
 
@@ -75,15 +65,16 @@ function multransfer!(
     return fdst
 end
 
-function multransfer!(fdst, fsrc, m::TensorPair, at, ab)
-    return multransfer!(fdst, fsrc, m.top, m.bot, at, ab)
+function multransfer!(fdst, fsrc, m::CompositeTensor{2}, at, ab)
+    top, bot = m
+    return multransfer!(fdst, fsrc, top, bot, at, ab)
 end
 
 function multransfer!(
     fdst::AbsTen{2,2},
     fsrc::AbsTen{2,2},
     ma::AbsTen{1,4},
-    mb::AbsTen{1,4},
+    mb::AbsTen{4,1},
     at::AbsTen{2,2},
     ab::AbsTen{2,2},
 )
@@ -105,7 +96,7 @@ function multransfer!(
         fsrc[D3 E3; x1 x3] *
         at[D4 E4; x2 x1] *
         ma[k; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k] *
+        mb[E1 E2 E3 E4; k] *
         (ab')[x4 x3; D2 E2]
     return fdst
 end
@@ -113,7 +104,7 @@ function multransfer!(
     fdst::AbsTen{2,2},
     fsrc::AbsTen{2,2},
     ma::AbsTen{2,4},
-    mb::AbsTen{2,4},
+    mb::AbsTen{4,2},
     at::AbsTen{2,2},
     ab::AbsTen{2,2},
 )
@@ -136,7 +127,7 @@ function multransfer!(
         fsrc[D3 E3; x1 x3] *
         at[D4 E4; x2 x1] *
         ma[k b; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k b] *
+        mb[E1 E2 E3 E4; k b] *
         (ab')[x4 x3; D2 E2]
     return fdst
 end
@@ -151,14 +142,15 @@ function multransfer!(
 end
 
 ## DOUBLE LAYER
-function multransfer!(fdst, m::TensorPair, fsrc, at, ab)
-    return multransfer!(fdst, m.top, m.bot, fsrc, at, ab)
+function multransfer!(fdst, m::CompositeTensor{2}, fsrc, at, ab)
+    top, bot = m
+    return multransfer!(fdst, top, bot, fsrc, at, ab)
 end
 
 function multransfer!(
     fdst::AbsTen{2,2},
     ma::AbsTen{1,4},
-    mb::AbsTen{1,4},
+    mb::AbsTen{4,1},
     fsrc::AbsTen{2,2},
     at::AbsTen{2,2},
     ab::AbsTen{2,2},
@@ -181,14 +173,14 @@ function multransfer!(
         fsrc[D1 E1; x2 x4] *
         at[D4 E4; x2 x1] *
         ma[k; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k] *
+        mb[E1 E2 E3 E4; k] *
         (ab')[x4 x3; D2 E2]
     return fdst
 end
 function multransfer!(
     fdst::AbsTen{2,2},
     ma::AbsTen{2,4},
-    mb::AbsTen{2,4},
+    mb::AbsTen{4,2},
     fsrc::AbsTen{2,2},
     at::AbsTen{2,2},
     ab::AbsTen{2,2},
@@ -212,7 +204,7 @@ function multransfer!(
         fsrc[D1 E1; x2 x4] *
         at[D4 E4; x2 x1] *
         ma[k b; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k b] *
+        mb[E1 E2 E3 E4; k b] *
         (ab')[x4 x3; D2 E2]
     return fdst
 end

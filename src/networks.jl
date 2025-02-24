@@ -14,51 +14,77 @@ TensorKit.spacetype(uc::AbstractUnitCell) = spacetype(typeof(uc))
 TensorKit.spacetype(::Type{<:AbstractNetwork{G,T}}) where {G,T} = spacetype(T)
 
 """
-    TensorPair{S<:IndexSpace,N₁,N₂, ...} <: AbstractTensorMap{S, N₁, N₂}
+    CompositeTensor{M,T,S<:IndexSpace,N₁,N₂, ...} <: AbstractTensorMap{T,S,N₁,N₂}
 
-Subtype of `AbstractTensorMap` for representing a two-layered tensor map, e.g. a 
+Subtype of `AbstractTensorMap` for representing a M-layered tensor map, e.g. a 
 tensor and its conjugate.
 """
-struct TensorPair{S,N₁,N₂,T<:AbstractTensorMap{S,N₁,N₂}} <: AbstractTensorMap{S,N₁,N₂}
-    top::T
-    bot::T
+struct CompositeTensor{M,T,S,N₁,N₂,A<:TensorMap{T,S,N₁,N₂},F<:Tuple} <:
+       AbstractTensorMap{T,S,N₁,N₂}
+    layers::NTuple{M,A}
+    funcs::F
 end
 
-TensorPair(t::TensorMap) = TensorPair(t, t)
+Base.length(ct::CompositeTensor{M}) where {M} = M
 
-function Base.copy!(t1::TensorPair, t2::TensorPair)
-    copy!(t1.top, t2.top)
-    copy!(t1.bot, t2.bot)
-    return t1
+Base.map(func, ct::CompositeTensor) = map((ten, af) -> func(af(ten)), ct.layers, ct.funcs)
+mapbefore(f, ct::CompositeTensor) = map((t, af) -> af(f(t)), ct.layers, ct.funcs)
+
+function CompositeTensor(ct::NTuple{M,T}) where {M,T<:TensorMap}
+    funcs = NTuple{M,typeof(identity)}(fill(identity, M))
+
+    return CompositeTensor(ct, funcs)
+end
+function CompositeTensor(ct::NTuple{M,T}) where {M,T<:TensorKit.AdjointTensorMap}
+    funcs = NTuple{M,typeof(adjoint)}(fill(adjoint, M))
+    return CompositeTensor(map(parent, ct), funcs)
 end
 
-const AbstractDoubleLayerNetwork{G,ElType<:TensorPair,A} = AbstractUnitCell{G,ElType,A}
+CompositeTensor(ct::NTuple{M,AbstractTensorMap}) where {M} = CompositeTensor(ct...)
 
-top(tp::TensorPair) = tp.top
-bot(tp::TensorPair) = tp.bot
+function CompositeTensor(args::Vararg{<:AbstractTensorMap})
+    unwrap = map(t -> t isa TensorKit.AdjointTensorMap ? parent(t) : t, args)
+    conj = map(t -> t isa TensorKit.AdjointTensorMap ? adjoint : identity, args)
+    return CompositeTensor(unwrap, conj)
+end
 
-Base.:(==)(t1::TensorPair, t2::TensorPair) = (top(t1) == top(t2)) && (bot(t1) == bot(t2))
+function Base.getindex(
+    ct::CompositeTensor{M,T,S,N1,N2,A,F},
+    ind::Union{Int128,Int16,Int32,Int64,Int8,UInt128,UInt16,UInt32,UInt64,UInt8},
+) where {M,T<:Number,S<:ElementarySpace,N1,N2,A,F}
+    return ct.funcs[ind](ct.layers[ind])
+end
+Base.firstindex(ct::CompositeTensor) = 1
+Base.lastindex(ct::CompositeTensor) = length(ct)
 
-tensortype(tp::TensorPair) = tensortype(typeof(tp))
-tensortype(::Type{<:TensorPair{S,N₁,N₂,T}}) where {S,N₁,N₂,T} = T
-TensorKit.spacetype(t::TensorPair) = spacetype(tensortype(t))
-Base.eltype(t::TensorPair) = eltype(typeof(t))
-Base.eltype(T::Type{<:TensorPair}) = eltype(tensortype(T))
+function Base.iterate(ct::CompositeTensor, state=1)
+    state > length(ct) && nothing
+    return getindex(ct, state), state + 1
+end
 
-TensorKit.storagetype(t::TensorPair) = storagetype(typeof(t))
-TensorKit.storagetype(t::Type{<:TensorPair}) = storagetype(tensortype(t))
+Base.similar(ct::CompositeTensor) = CompositeTensor(mapbefore(similar, ct)...)
+Base.copy!(dst::CompositeTensor, src::CompositeTensor) = (foreach(copy!, dst, src); dst)
 
-TensorKit.scalartype(T::Type{<:TensorPair}) = scalartype(tensortype(T))
+doublelayer(t::TensorMap) = CompositeTensor((t, t))
 
-ContractableTrait(t::Type{TensorPair}) = ContractableTrait(tensortype(t))
+Base.:(==)(ct1::CompositeTensor, ct2::CompositeTensor) = all(map(==, ct1, ct2))
+
+tensortype(::Type{<:CompositeTensor{M,T,S,N₁,N₂,A}}) where {M,T,S,N₁,N₂,A} = A
+TensorKit.spacetype(t::CompositeTensor) = spacetype(tensortype(t))
+Base.eltype(t::CompositeTensor) = eltype(typeof(t))
+Base.eltype(T::Type{<:CompositeTensor}) = eltype(tensortype(T))
+
+TensorKit.storagetype(t::CompositeTensor) = storagetype(typeof(t))
+TensorKit.storagetype(t::Type{<:CompositeTensor}) = storagetype(tensortype(t))
+
+TensorKit.scalartype(T::Type{<:CompositeTensor}) = scalartype(tensortype(T))
+
+ContractableTrait(t::Type{CompositeTensor}) = ContractableTrait(tensortype(t))
 
 ## Implement functions for contractable tensors etc
 ## ContractableTensors need a notion of an east, south, west, north bonds
 
-function bondspace(network::AbstractUnitCell)
-    out = tuple((getindex.(bondspace.(network), i) for i in 1:4)...)
-    return out
-end
+virtualspace(network::AbstractUnitCell, dir) = virtualspace.(network, dir)
 
 swapaxes(network::AbstractNetwork) = swapaxes.(network)
 invertaxes(network::AbstractNetwork) = invertaxes.(network)
@@ -66,13 +92,20 @@ invertaxes(network::AbstractNetwork) = invertaxes.(network)
 ## INTERFACE
 
 """
-    bondspace(t)
+    virtualspace(t, [dir])
 
 Return an `NTuple{4,<:VectorSpace}` containing the east, south, west, and north vector spaces associated with the respective
 bonds, in that order. Used to initialise appropriate algorithm tensors. For custom data types, this function must be 
 specified for use in contraction algorithms.
 """
-function bondspace end
+function virtualspace(t)
+    e = virtualspace(t, 1)
+    s = virtualspace(t, 2)
+    w = virtualspace(t, 3)
+    n = virtualspace(t, 4)
+
+    return (e, s, w, n)
+end
 
 """
     swapaxes(t)
@@ -90,40 +123,29 @@ this function must be specified for use in contraction algorithms.
 """
 function invertaxes end
 
-bondspace(t::AbsTen{0,4}) = tuple(domain(t)...)
-function bondspace(tp::T) where {T<:TensorPair}
-    return tuple((domain(tp.top)[i] * domain(tp.bot)[i]' for i in 1:4)...)
-end
+virtualspace(t::AbsTen{0,4}, dir) = domain(t, dir)
+virtualspace(ct::CompositeTensor, dir::Int) = prod(mapbefore(t -> domain(t, dir), ct))
 
 swapaxes(t::TenAbs{4}) = permutedom(t, (2, 1, 4, 3))
 invertaxes(t::TenAbs{4}) = permutedom(t, (3, 4, 1, 2))
 
-function swapaxes(tp::TensorPair)
-    return TensorPair(swapaxes(tp.top), swapaxes(tp.bot))
-end
-function invertaxes(tp::TensorPair)
-    return TensorPair(invertaxes(tp.top), invertaxes(tp.bot))
-end
-
-east(t) = bondspace(t)[1]
-south(t) = bondspace(t)[2]
-west(t) = bondspace(t)[3]
-north(t) = bondspace(t)[4]
+swapaxes(ct::CompositeTensor) = CompositeTensor(mapbefore(swapaxes, ct))
+invertaxes(ct::CompositeTensor) = CompositeTensor(mapbefore(invertaxes, ct))
 
 ensure_contractable(x) = x
 
-function ensure_contractable(
-    x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,0,4}}
-)
-    return x
-end
-function ensure_contractable(
-    x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,N,4}}
-) where {N}
-    return TensorPair.(x)
-end
-
-rotate(tp::TensorPair, i) = TensorPair(rotate(top(tp), i), rotate(bot(tp), i))
+# function ensure_contractable(
+#     x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,0,4}}
+# )
+#     return x
+# end
+# function ensure_contractable(
+#     x::AbstractUnitCell{<:AbstractUnitCellGeometry,<:TensorMap{<:IndexSpace,N,4}}
+# ) where {N}
+#     return TensorPair.(x)
+# end
+#
+rotate(ct::CompositeTensor, i) = CompositeTensor(mapbefore(t -> rotate(t, i), ct))
 
 """
     adjoining_bondspace(network::AbstractUnitCell) -> E, S, W, N
@@ -134,5 +156,5 @@ as `north(network)[x,y + 1]`.
 """
 function adjoining_bondspace(network)
     # east, south, west, north ← bondspace(network)
-    return map(circshift, bondspace(network), ((1, 0), (0, 1), (-1, 0), (0, -1)))
+    return map(circshift, virtualspace(network), ((1, 0), (0, 1), (-1, 0), (0, -1)))
 end

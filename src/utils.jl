@@ -1,6 +1,6 @@
 # Convenience const. 
-const AbsTen{N₁,N₂,S} = AbstractTensorMap{S,N₁,N₂}
-const TenAbs{N₂,N₁,S} = AbstractTensorMap{S,N₁,N₂}
+const AbsTen{N₁,N₂,S,T} = AbstractTensorMap{T,S,N₁,N₂}
+const TenAbs{N₂,N₁,S,T} = AbstractTensorMap{T,S,N₁,N₂}
 
 const _DIR_TO_DOMIND = (east=1, south=2, west=3, north=4)
 
@@ -15,6 +15,11 @@ function nswap(k::Int, n::Int, p::NTuple{N}) where {N}
         return (p[1:(n - 1)]..., p[k], p[n:(k - 1)]..., p[(k + 1):N]...)::typeof(p)
     end
 end
+
+space2tuple(space::ProductSpace{S,M}) where {S,M} = NTuple{M,S}(space)
+space2tuple(space) = space2tuple(convert(ProductSpace, space))
+
+mapadjoint(space) = prod(map(adjoint, space2tuple((space))))
 
 @doc raw"""
     swap(k::Int, l::Int, p::NTuple)
@@ -60,7 +65,7 @@ function slice(ind::NTuple{N,Int}, sp::ProductSpace{S,N₁}) where {N,N₁,S<:In
 end
 
 # Alt permute() 
-function _permute(t::AbstractTensorMap{<:IndexSpace,N,M}, p::Tuple) where {N,M}
+function _permute(t::AbsTen{N,M,<:IndexSpace}, p::Tuple) where {N,M}
     if !(length(p) == N + M)
         throw(DimensionMismatch())
     else

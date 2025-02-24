@@ -1,33 +1,31 @@
 # mpo-like
 function applyhac!(
-    hac::AbstractTensorMap{S,1,2},
-    ac::AbstractTensorMap{S,1,2},
-    fl::AbstractTensorMap{S,1,2},
-    fr::AbstractTensorMap{S,1,2},
-    m::AbstractTensorMap{S,0,4},
-) where {S}
+    hac::AbsTen{1,2}, ac::AbsTen{1,2}, fl::AbsTen{1,2}, fr::AbsTen{1,2}, m::AbsTen{0,4}
+)
     @tensoropt hac[D2; x4 x3] =
         ac[D4; x2 x1] * fl[D3; x1 x3] * m[D1 D2 D3 D4] * fr[D1; x2 x4]
 end
 # peps-like
 function applyhac!(
-    hac::AbstractTensorMap{S,2,2},
-    ac::AbstractTensorMap{S,2,2},
-    fl::AbstractTensorMap{S,2,2},
-    fr::AbstractTensorMap{S,2,2},
-    m::TensorPair,
-) where {S}
-    return applyhac!(hac, ac, fl, fr, m.top, m.bot)
+    hac::AbsTen{2,2},
+    ac::AbsTen{2,2},
+    fl::AbsTen{2,2},
+    fr::AbsTen{2,2},
+    m::CompositeTensor{2},
+)
+    top, bot = m
+
+    return applyhac!(hac, ac, fl, fr, top, bot)
 end
 
 function applyhac!(
-    hac::AbstractTensorMap{S,2,2},
-    ac::AbstractTensorMap{S,2,2},
-    fl::AbstractTensorMap{S,2,2},
-    fr::AbstractTensorMap{S,2,2},
-    ma::AbstractTensorMap{S,1,4},
-    mb::AbstractTensorMap{S,1,4},
-) where {S}
+    hac::AbsTen{2,2},
+    ac::AbsTen{2,2},
+    fl::AbsTen{2,2},
+    fr::AbsTen{2,2},
+    ma::AbsTen{1,4},
+    mb::AbsTen{4,1},
+)
     @tensoropt (
         k => 2,
         D1 => D,
@@ -46,18 +44,18 @@ function applyhac!(
         ac[D4 E4; x2 x1] *
         fl[D3 E3; x1 x3] *
         ma[k; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k] *
+        mb[E1 E2 E3 E4; k] *
         fr[D1 E1; x2 x4]
 end
 # pepo-like
 function applyhac!(
-    hac::AbstractTensorMap{S,2,2},
-    ac::AbstractTensorMap{S,2,2},
-    fl::AbstractTensorMap{S,2,2},
-    fr::AbstractTensorMap{S,2,2},
-    ma::AbstractTensorMap{S,2,4},
-    mb::AbstractTensorMap{S,2,4},
-) where {S}
+    hac::AbsTen{2,2},
+    ac::AbsTen{2,2},
+    fl::AbsTen{2,2},
+    fr::AbsTen{2,2},
+    ma::AbsTen{2,4},
+    mb::AbsTen{4,2},
+)
     @tensoropt (
         k => 2,
         b => 2,
@@ -77,25 +75,15 @@ function applyhac!(
         ac[D4 E4; x2 x1] *
         fl[D3 E3; x1 x3] *
         ma[k b; D1 D2 D3 D4] *
-        (mb')[E1 E2 E3 E4; k b] *
+        mb[E1 E2 E3 E4; k b] *
         fr[D1 E1; x2 x4]
 end
 
 # mpo-like
-function applyhc!(
-    hc::AbstractTensorMap{S,0,2},
-    c::AbstractTensorMap{S,0,2},
-    fl::AbstractTensorMap{S,1,2},
-    fr::AbstractTensorMap{S,1,2},
-) where {S}
+function applyhc!(hc::AbsTen{0,2}, c::AbsTen{0,2}, fl::AbsTen{1,2}, fr::AbsTen{1,2})
     @tensoropt hc[x4 x3] = c[x2 x1] * fl[D; x1 x3] * fr[D; x2 x4]
 end
 # pepx-like
-function applyhc!(
-    hc::AbstractTensorMap{S,0,2},
-    c::AbstractTensorMap{S,0,2},
-    fl::AbstractTensorMap{S,2,2},
-    fr::AbstractTensorMap{S,2,2},
-) where {S}
+function applyhc!(hc::AbsTen{0,2}, c::AbsTen{0,2}, fl::AbsTen{2,2}, fr::AbsTen{2,2})
     @tensoropt hc[x4 x3] = c[x2 x1] * fl[D E; x1 x3] * fr[D E; x2 x4]
 end

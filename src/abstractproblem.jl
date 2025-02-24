@@ -76,15 +76,15 @@ Initialize an instance of a `InfiniteContraction` to contract network of tensors
 - `ProblemState{Alg,...}`: problem state instancecorresponding to the supplied tensors 
     and parameters
 """
-function newcontraction(algorithm, network; kwargs...)
-    initial_runtime = initialize(algorithm, network)
-    return newcontraction(algorithm, network, initial_runtime; kwargs...)
+function newcontraction(network; alg, kwargs...)
+    initial_runtime = initialize(network, alg)
+    return newcontraction(network, initial_runtime; alg=alg, kwargs...)
 end
 
 function newcontraction(
-    algorithm,
     network,
     initial_runtime;
+    alg,
     store_initial=true,
     verbose=true,
     callback=Callback(identity, nothing),
@@ -94,10 +94,10 @@ function newcontraction(
     if store_initial
         initial_copy = deepcopy(initial_runtime)
         return InfiniteContraction(
-            algorithm, network, initial_runtime, info, callback, verbose, initial_copy
+            alg, network, initial_runtime, info, callback, verbose, initial_copy
         )
     else
-        return InfiniteContraction(algorithm, network, initial_runtime, info, callback, verbose)
+        return InfiniteContraction(alg, network, initial_runtime, info, callback, verbose)
     end
 end
 
@@ -152,7 +152,7 @@ function runcontraction!(problem::InfiniteContraction)
     if problem.info.finished == true
         println(
             "Problem has reached termination according to parameters set. Use `forcerun!`, 
-                or `continue!` followed by `runcontraction!` to ignore this and continue anyway."
+                or `continue!` followed by `runcontraction!` to ignore this and continue anyway.",
         )
     else
         _run!(problem)

@@ -11,55 +11,37 @@ struct FixedPoints{A<:AbUnCe{<:TenAbs{2}}} <: AbstractFixedPoints
     end
 end
 
-FixedPoints(f, mps::MPS, network::AbstractNetwork) = initfixedpoints(f, mps, network)
+function FixedPoints(f, mps::MPS, network::AbstractNetwork)
+    mps_tensor = getcentral(mps)
+
+    left = initleft.(f, mps_tensor, network)
+    right = initright.(f, mps_tensor, network)
+
+    return FixedPoints(left, right)
+end
 
 Base.similar(fps::FixedPoints) = FixedPoints(similar(fps.left), similar(fps.right))
 
 TensorKit.scalartype(::Type{<:FixedPoints{A}}) where {A} = scalartype(A)
 
-function initfixedpoints(f, mps::MPS, network::AbstractNetwork)
-    mps_tensor = getcentral(mps)
-    # network_tensor = convert.(TensorMap, network)
-    left = _initfixedpoints.(f, mps_tensor, network, :left)
-    right = _initfixedpoints.(f, mps_tensor, network, :right)
-    return FixedPoints(left, right)
-end
+initleft(f, mps, bulk) = initfixedpoint(f, mps, bulk, :left)
+initright(f, mps, bulk) = initfixedpoint(f, mps, bulk, :right)
 
-function _initfixedpoints(
-    f, mps::AbstractTensorMap{S}, network, leftright::Symbol
-) where {S}
-    T = promote_type(scalartype(mps), scalartype(network))
-
-    cod = fixedpoint_codomain(network, leftright)
-    dom = fixedpoint_domain(mps, leftright)
-
-    return TensorMap(f, T, cod, dom)
-end
-
-function fixedpoint_codomain(network, leftright::Symbol)
+function initfixedpoint(f, mps, bulk, leftright::Symbol)
     if leftright === :left
-        return _fixedpoint_codomain(network, 3)
+        bulkind = 3
+        mpsind = 2
     elseif leftright === :right
-        return _fixedpoint_codomain(network, 1)
+        bulkind = mpsind = 1
     else
         throw(ArgumentError(""))
     end
-end
-_fixedpoint_codomain(network_tensor::AbsTen{0,4}, lr::Int) = domain(network_tensor)[lr]
-function _fixedpoint_codomain(network_tensor::TensorPair, lr::Int)
-    return domain(network_tensor.top)[lr] * domain(network_tensor.bot)[lr]'
-end
 
-function fixedpoint_domain(mps_tensor, leftright::Symbol)
-    if leftright === :left
-        return _fixedpoint_domain(mps_tensor, 2)
-    elseif leftright === :right
-        return _fixedpoint_domain(mps_tensor, 1)
-    else
-        throw(ArgumentError(""))
-    end
+    cod = virtualspace(bulk, bulkind)
+    dom = domain(mps)[mpsind]' * domain(mps)[mpsind]
+
+    return TensorMap(f, promote_type(scalartype(mps), scalartype(bulk)), cod, dom)
 end
-_fixedpoint_domain(mps_tensor, lr::Int) = domain(mps_tensor)[lr]' * domain(mps_tensor)[lr]
 
 function renorm(cb, ca, fl, fr)
     c_out = hcapply!(similar(ca), ca, fl, fr)
@@ -67,35 +49,21 @@ function renorm(cb, ca, fl, fr)
     return N
 end
 
-function hcapply!(
-    hc::AbstractTensorMap{S,0,2},
-    c::AbstractTensorMap{S,0,2},
-    fl::AbstractTensorMap{S,1,2},
-    fr::AbstractTensorMap{S,1,2},
-) where {S}
+function hcapply!(hc::AbsTen{0,2}, c::AbsTen{0,2}, fl::AbsTen{1,2}, fr::AbsTen{1,2})
     @tensoropt hc[dr dl] = c[ur ul] * fl[m; ul dl] * fr[m; ur dr]
     return hc
 end
-function hcapply!(
-    hc::AbstractTensorMap{S,0,2},
-    c::AbstractTensorMap{S,0,2},
-    fl::AbstractTensorMap{S,2,2},
-    fr::AbstractTensorMap{S,2,2},
-) where {S}
+function hcapply!(hc::AbsTen{0,2}, c::AbsTen{0,2}, fl::AbsTen{2,2}, fr::AbsTen{2,2})
     @tensoropt hc[dr dl] = c[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr]
     return hc
 end
 
-function fixed_point_norm(
-    cd::C, cu::C, fl::F, fr::F
-) where {S,C<:AbstractTensorMap{S,0,2},F<:AbstractTensorMap{S,1,2}}
+function fixed_point_norm(cd::C, cu::C, fl::F, fr::F) where {C<:AbsTen{0,2},F<:AbsTen{1,2}}
     @tensoropt n = cu[ur ul] * fl[m; ul dl] * fr[m; ur dr] * conj(cd[dr dl])
     return n
 end
 
-function fixed_point_norm(
-    cd::C, cu::C, fl::F, fr::F
-) where {S,C<:AbstractTensorMap{S,0,2},F<:AbstractTensorMap{S,2,2}}
+function fixed_point_norm(cd::C, cu::C, fl::F, fr::F) where {C<:AbsTen{0,2},F<:AbsTen{2,2}}
     @tensoropt n = cu[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr] * conj(cd[dr dl])
     return n
 end
@@ -103,9 +71,8 @@ end
 #     @tensoropt hc[dr dl] = cu[ur ul] * fl[m1 m2; ul dl] * fr[m1 m2; ur dr] * conj(cd[dr dl])
 # end
 
-function fixedpoints(mps::MPS, network)
-    initial_fpoints = FixedPoints(rand, mps, network)
-    return fixedpoints!(initial_fpoints, mps, network)
+function fixedpoints(mps::MPS, network, f0=FixedPoints(rand, mps, network))
+    return fixedpoints!(f0, mps, network)
 end
 
 #this is now the correct env func

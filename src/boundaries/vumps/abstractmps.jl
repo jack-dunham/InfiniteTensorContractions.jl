@@ -127,7 +127,9 @@ MPS(AL, C, AR) = MPS(AL, C, AR, centraltensor(AL, C))
 
 # TENSOR OPERATIONS
 
-function _similar_ac(ac1::AbstractTensorMap{S,N}, ac2::AbstractTensorMap{S,M}) where {S,N,M}
+function _similar_ac(
+    ac1::AbstractTensorMap{T,S,N}, ac2::AbstractTensorMap{T,S,M}
+) where {T,S,N,M}
     return _similar_ac(Val(N), ac1, ac2)
 end
 _similar_ac(::Val{0}, ac1, ac2) = similar(ac2)
@@ -141,28 +143,28 @@ function centraltensor!(AC, C::AbUnCe{<:AbsTen{0,2}}, AR)
     return mulbond!.(AC, circshift(C, (1, 0)), AR)
 end
 
-function mulbond(A1::AbstractTensorMap{S}, A2::AbstractTensorMap{S}) where {S}
+function mulbond(A1::AbstractTensorMap{T,S}, A2::AbstractTensorMap{T,S}) where {T,S}
     return mulbond!(_similar_ac(A1, A2), A1, A2)
 end
 # Right
 function mulbond!(
-    CA::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}, A::AbstractTensorMap{S,1,2}
+    CA::AbsTen{1,2,S}, C::AbsTen{0,2,S}, A::AbsTen{1,2,S}
 ) where {S<:IndexSpace}
     return @tensoropt CA[p1; xr xl] = C[x_in xl] * A[p1; xr x_in]
 end
 function mulbond!(
-    CA::AbstractTensorMap{S,2,2}, C::AbstractTensorMap{S,0,2}, A::AbstractTensorMap{S,2,2}
+    CA::AbsTen{2,2,S}, C::AbsTen{0,2,S}, A::AbsTen{2,2,S}
 ) where {S<:IndexSpace}
     return @tensoropt CA[p1 p2; xr xl] = C[x_in xl] * A[p1 p2; xr x_in]
 end
 # Left
 function mulbond!(
-    AC::AbstractTensorMap{S,1,2}, A::AbstractTensorMap{S,1,2}, C::AbstractTensorMap{S,0,2}
+    AC::AbsTen{1,2,S}, A::AbsTen{1,2,S}, C::AbsTen{0,2,S}
 ) where {S<:IndexSpace}
     return @tensoropt AC[p1; xr xl] = A[p1; x_in xl] * C[xr x_in]
 end
 function mulbond!(
-    AC::AbstractTensorMap{S,2,2}, A::AbstractTensorMap{S,2,2}, C::AbstractTensorMap{S,0,2}
+    AC::AbsTen{2,2,S}, A::AbsTen{2,2,S}, C::AbsTen{0,2,S}
 ) where {S<:IndexSpace}
     return @tensoropt AC[p1 p2; xr xl] = A[p1 p2; x_in xl] * C[xr x_in]
 end
