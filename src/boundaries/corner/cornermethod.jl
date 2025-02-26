@@ -81,8 +81,8 @@ TensorKit.scalartype(::Type{<:CornerMethodRuntime{T}}) where {T} = scalartype(T)
 chispace(c::Corners) = domain(c[1][1, 1])[1]
 chispace(c::CornerMethodTensors) = chispace(c.corners)
 
-function step!(problem::InfiniteContraction{<:AbstractCornerMethod})
-    fpcm = dofpcm(problem.algorithm)
+function step!(problem::RenormalizationProblem{<:AbstractCornerMethod})
+    fpcm = dofpcm(problem.alg)
     error = step!(fpcm, problem)
     return error
 end
@@ -127,21 +127,50 @@ end
 
 function updatecorners!(tensors::CornerMethodTensors, tensors_permuted::CornerMethodTensors)
     updatecorners!(tensors.corners, tensors_permuted.corners)
+    updateedges!(tensors.edges, tensors_permuted.edges)
     return tensors
 end
 
 function updatecorners!(corners::C, corners_permuted::C) where {C<:Corners}
     C1, C2, C3, C4 = corners_permuted
 
+    # foreach(c -> println(space(c[1,1])), corners_permuted)
+
     # Between primary and permuted corners, C4 and C2 have swapped positions
     foreach(corners, (C1, C4, C3, C2)) do c1, c2
         # The unit cell is also transposed...
-        broadcast(c1, permutedims(c2)) do t1, t2
-            permutedom!(t1, t2, (2, 1))
+        # broadcast(c1, permutedims(c2)) do t1, t2
+        #     permutedom!(t1, t2, (2, 1))
+        # end
+        c1 .= broadcast(c1, permutedims(c2)) do t1, t2
+            return permutedom(t2, (2, 1))
         end
     end
 
+    # foreach(c -> println(space(c[1,1])), corners)
+
     return corners
+end
+
+function updateedges!(edges::E,edges_permuted::E) where {E<:Edges}
+    C1, C2, C3, C4 = edges_permuted
+
+    # foreach(c -> println(space(c[1,1])), corners_permuted)
+
+    # Between primary and permuted corners, C4 and C2 have swapped positions
+    foreach(edges, (C4, C3, C2, C1)) do c1, c2
+        # The unit cell is also transposed...
+        # broadcast(c1, permutedims(c2)) do t1, t2
+        #     permutedom!(t1, t2, (2, 1))
+        # end
+        c1 .= broadcast(c1, permutedims(c2)) do t1, t2
+            return t2
+        end
+    end
+
+    # foreach(c -> println(space(c[1,1])), corners)
+
+    return edges
 end
 
 function ctmerror!(runtime::CornerMethodRuntime)

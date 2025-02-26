@@ -82,7 +82,7 @@ function KrylovKit.initialize(network, alg::VUMPS)
     return VUMPSRuntime(boundary_mps, fixed_points, svals)
 end
 
-function step!(problem::InfiniteContraction{<:VUMPS})
+function step!(problem::RenormalizationProblem{<:VUMPS})
     return step!(problem.runtime, problem.network, problem.algorithm)
 end
 

@@ -155,8 +155,11 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, bonddim; kwargs...)
             *--V--*
                |
             =#
-            projectcorner!(
-                C1[x + 1, y + 0], C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
+            # projectcorner!(
+            #     C1[x + 1, y + 0], C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
+            # )
+            C1[x + 1, y + 0] = projectcorner(
+                C1[x + 0, y + 0], T1[x + 1, y + 0], VL[x + 0, y + 0]
             )
             #=
                     1
@@ -165,21 +168,30 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, bonddim; kwargs...)
                 *--V--*
                    |
             =#
-            projectcorner!(
-                C2[x + 2, y + 0],
-                C2[x + 3, y + 0],
-                swapvirtual(T1[x + 2, y + 0]),
-                VR[x + 3, y + 0],
+            # projectcorner!(
+            #     C2[x + 2, y + 0],
+            #     C2[x + 3, y + 0],
+            #     swapvirtual(T1[x + 2, y + 0]),
+            #     VR[x + 3, y + 0],
+            # )
+            C2[x + 2, y + 0] = projectcorner(
+                C2[x + 3, y + 0], swapvirtual(T1[x + 2, y + 0]), VR[x + 3, y + 0]
             )
 
-            projectcorner!(
-                C3[x + 2, y + 3], C3[x + 3, y + 3], T3[x + 2, y + 3], UR[x + 3, y + 2]
+            # projectcorner!(
+            #     C3[x + 2, y + 3], C3[x + 3, y + 3], T3[x + 2, y + 3], UR[x + 3, y + 2]
+            # )
+            C3[x + 2, y + 3] = projectcorner(
+                C3[x + 3, y + 3], T3[x + 2, y + 3], UR[x + 3, y + 2]
             )
-            projectcorner!(
-                C4[x + 1, y + 3],
-                C4[x + 0, y + 3],
-                swapvirtual(T3[x + 1, y + 3]),
-                UL[x + 0, y + 2],
+            # projectcorner!(
+            #     C4[x + 1, y + 3],
+            #     C4[x + 0, y + 3],
+            #     swapvirtual(T3[x + 1, y + 3]),
+            #     UL[x + 0, y + 2],
+            # )
+            C4[x + 1, y + 3] = projectcorner(
+                C4[x + 0, y + 3], swapvirtual(T3[x + 1, y + 3]), UL[x + 0, y + 2]
             )
             #=
                |
@@ -190,12 +202,15 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, bonddim; kwargs...)
             *--V--*
                |
             =#
-            projectedge!(
-                T4[x + 1, y + 1],
-                T4[x + 0, y + 1],
-                network[x + 1, y + 1],
-                UL[x + 0, y + 0],
-                VL[x + 0, y + 1],
+            # projectedge!(
+            #     T4[x + 1, y + 1],
+            #     T4[x + 0, y + 1],
+            #     network[x + 1, y + 1],
+            #     UL[x + 0, y + 0],
+            #     VL[x + 0, y + 1],
+            # )
+            T4[x + 1, y + 1] = projectedge(
+                T4[x + 0, y + 1], network[x + 1, y + 1], UL[x + 0, y + 0], VL[x + 0, y + 1]
             )
             #=
                    |
@@ -206,8 +221,15 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, bonddim; kwargs...)
                 *--V--*
                    |
             =#
-            projectedge!(
-                T2[x + 2, y + 1],
+            # projectedge!(
+            #     T2[x + 2, y + 1],
+            #     T2[x + 3, y + 1],
+            #     invertaxes(network[x + 2, y + 1]),
+            #     # flipaxis(network[x + 2, y + 1]),
+            #     VR[x + 3, y + 1],
+            #     UR[x + 3, y + 0],
+            # )
+            T2[x + 2, y + 1] = projectedge(
                 T2[x + 3, y + 1],
                 invertaxes(network[x + 2, y + 1]),
                 # flipaxis(network[x + 2, y + 1]),
@@ -219,6 +241,8 @@ function ctmrgmove!(ctmrg::CornerMethodTensors, bonddim; kwargs...)
 
     normalize!(ctmrg.corners)
     normalize!(ctmrg.edges)
+
+    # foreach(c -> println(space(c[1,1])),ctmrg.corners)
 
     return ctmrg
 end
@@ -295,11 +319,11 @@ function testctmrg(data_func; T=Float64)
 
         cb = (st, args...) -> println(contract(st.tensors, b2) ./ contract(st.tensors, b1))
 
-        state = newcontraction(alg, b1)#; callback=cb)
+        state = newrenormalization(alg, b1)#; callback=cb)
 
         did_converge = false
 
-        runcontraction!(state)
+        renormalize!(state)
 
         Z = contract(state.runtime.primary, b1)
         magn = contract(state.runtime.primary, b2) ./ Z

@@ -96,7 +96,7 @@ end
 
 dofpcm(alg::HybridCornerMethod) = alg.dofpcm
 
-step!(::Union{Never,Always}, problem) = step!(problem.runtime, problem.algorithm)
+step!(::Union{Never,Always}, problem) = step!(problem.runtime, problem.alg)
 
 function step!(dofpcm::AbstractBooleanDoFPCM, problem)
     if dofpcm(problem)

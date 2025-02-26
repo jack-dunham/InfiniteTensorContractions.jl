@@ -3,7 +3,11 @@ function symmetrise_edge!(x)
     return axpby!(1//2, isometry(codomain(x), codomain(x)') * transpose(x)', 1//2, x)
 end
 
-projectcorner(c, t, p) = projectcorner!(similar(c), c, t, p)
+function projectcorner(c, t, p)
+    dstdom = domain(t, 1) * domain(p, 1)
+    cdst = similar(c, codomain(c), dstdom)
+    return projectcorner!(cdst, c, t, p)
+end
 function projectcorner!(c_dst, c_src, t, uv)
     if c_dst === c_src
         c_copy = deepcopy(c_src)
@@ -26,7 +30,12 @@ function _projectcorner!(c_dst, c_src, t::AbsTen{2,2}, uv)
     return c_dst
 end
 
-projectedge(t, m, u, v) = projectedge!(similar(t), t, m, u, v)
+function projectedge(t, m, u, v)
+    coddst = codomain(t)
+    domdst = domain(v, 1) * domain(u, 1)
+    tdst = similar(t, coddst, domdst)
+    return projectedge!(tdst, t, m, u, v)
+end
 function projectedge!(t_dst, t_src, m, u, v)
     if t_dst === t_src
         t_copy = deepcopy(t_src)
