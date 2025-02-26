@@ -5,6 +5,7 @@ using CircularArrays
 using KrylovKit
 using LinearAlgebra
 using TensorKit
+using DocStringExtensions
 
 export ITC
 
