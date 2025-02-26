@@ -5,6 +5,7 @@ abstract type AbstractUnitCell{G<:AbstractUnitCellGeometry,ElType,A} <:
 const AbUnCe{T,G,A} = AbstractUnitCell{G,T,A}
 
 struct Square <: AbstractUnitCellGeometry end
+struct SquareSymmetric <: AbstractUnitCellGeometry end
 
 struct UnitCell{G<:AbstractUnitCellGeometry,ElType,A} <: AbstractUnitCell{G,ElType,A}
     data::CircularArray{ElType,2,A}
@@ -20,8 +21,30 @@ end
 ## ABSTRACT ARRAY
 
 @inline Base.size(uc::AbstractUnitCell) = size(getdata(uc))
-@inline Base.getindex(uc::AbstractUnitCell, i...) = getindex(getdata(uc), i...)
+function Base.size(uc::AbstractUnitCell{SquareSymmetric})
+    nx = size(getdata(uc), 1)
+    return (nx, nx)
+end
+Base.getindex(uc::AbstractUnitCell{G}, i...) where {G} = _getindex(G, uc, i...)
+_getindex(::Type{<:AbstractUnitCellGeometry}, uc, i...) = getindex(getdata(uc), i...)
 @inline Base.setindex!(uc::AbstractUnitCell, v, i...) = setindex!(getdata(uc), v, i...)
+
+function _getindex(G::Type{SquareSymmetric}, uc::AbstractUnitCell, inds::Tuple)
+    return _getindex(G, uc, inds[1], inds[2])
+end
+function _getindex(::Type{SquareSymmetric}, uc::AbstractUnitCell, i::Int)
+    nx = size(uc, 1)
+    q = div(i - 1, nx, RoundDown)
+    r = mod(i, 1:3)
+    return getindex(circshift(getdata(uc), -q), r)
+end
+function _getindex(::Type{SquareSymmetric}, uc::AbstractUnitCell, i1, i2::Int)
+    return getindex(circshift(getdata(uc), -(i2 - 1)), i1)
+end
+function _getindex(G::Type{SquareSymmetric}, uc::AbstractUnitCell, i1, i2)
+    return _getindex(G, uc, i2, i1)
+end
+## 
 
 ## SIMILAR
 
@@ -53,16 +76,31 @@ struct UnitCellStyle{G,A} <: AbstractUnitCellStyle{G,A} end
 (T::Type{<:AbstractUnitCellStyle})(::Val{2}) = T()
 (T::Type{<:AbstractUnitCellStyle})(::Val{N}) where {N} = Broadcast.DefaultArrayStyle{N}()
 
-@inline function Base.BroadcastStyle(::Type{UnitCell{G,ElType,A}}) where {G,ElType,A}
-    return UnitCellStyle{G,typeof(Base.BroadcastStyle(A))}()
+@inline function Broadcast.BroadcastStyle(::Type{UnitCell{G,ElType,A}}) where {G,ElType,A}
+    return UnitCellStyle{G,typeof(Broadcast.BroadcastStyle(A))}()
 end
 
-@inline function Base.BroadcastStyle(
+function Broadcast.BroadcastStyle(
     ::UnitCellStyle{G,A}, ::Broadcast.ArrayStyle{<:CircularArray{ElType,2,B}}
 ) where {G,ElType,A,B}
-    AB = Base.BroadcastStyle(A(), Base.BroadcastStyle(B))
+    AB = Broadcast.BroadcastStyle(A(), Broadcast.BroadcastStyle(B))
     return UnitCellStyle{G,typeof(AB)}()
 end
+function Broadcast.BroadcastStyle(
+    ::UnitCellStyle{SquareSymmetric}, G::Broadcast.DefaultArrayStyle{2}
+)
+    return G
+end
+function Broadcast.BroadcastStyle(
+    ::UnitCellStyle{G1,A}, ::UnitCellStyle{G2,B}
+) where {A,B,G1,G2}
+    AB = Broadcast.BroadcastStyle(A(), B())
+    G = promote_geometry(G1, G2)
+    return UnitCellStyle{G,typeof(AB)}()
+end
+
+promote_geometry(::Type{T1}, ::Type{T2}) where {T1,T2} = promote_geometry(T2, T1)
+promote_geometry(::Type{Square}, ::Type{SquareSymmetric}) = Square
 
 @inline function Base.similar(
     bc::Broadcast.Broadcasted{UnitCellStyle{G,A}}, ::Type{ElType}

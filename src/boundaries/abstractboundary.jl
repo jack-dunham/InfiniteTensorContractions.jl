@@ -128,7 +128,11 @@ end
 
 function boundaryerror!(S_old::AbstractMatrix, C_new::AbstractMatrix)
     S_new = boundaryerror.(C_new)
-    err = @. norm(S_old - S_new)
+    if all(space.(S_new) == space.(S_old))
+        err = @. norm(S_old - S_new)
+    else
+        err = broadcast(_ -> Inf, S_new)
+    end
     S_old .= S_new
     return err
 end

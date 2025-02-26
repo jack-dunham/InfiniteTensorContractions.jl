@@ -62,10 +62,8 @@ function inittensors(f, network, alg::VUMPS)
     return VUMPSTensors(boundary_mps, fixed_points)
 end
 
-function start(state::BoundaryState{VUMPS})
-    vumps = state.tensors
-    sing_val = x -> tsvd(x, (1,), (2,))[2]
-    return (sing_val.(getbond(vumps.mps)),)
+function step!(problem::RenormalizationProblem{<:VUMPS})
+    return step!(problem.runtime, problem.network, problem.algorithm)
 end
 
 function step!(
