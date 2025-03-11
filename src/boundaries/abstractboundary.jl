@@ -6,7 +6,22 @@ function boundaryerror!(S_old::AbstractMatrix, C_new::AbstractMatrix)
     if all(space.(S_new) == space.(S_old))
         err = @. norm(S_old - S_new)
     else
-        err = broadcast(_ -> Inf, S_new)
+        err = broadcast(S_old, S_new) do s_old, s_new
+            wold = diag(convert(Array, s_old))
+            wnew = diag(convert(Array, s_new))
+
+            wold = wold / sum(wold)
+            wnew = wnew / sum(wnew)
+
+            entf = λ -> λ ≈ 0 ? 0 : -λ * log(λ)
+
+            eold = sum(entf, wold) / log(length(wold))
+            enew = sum(entf, wnew) / log(length(wnew))
+
+            rv = abs(eold - enew)
+
+            return rv
+        end
     end
     S_old .= S_new
     return err
