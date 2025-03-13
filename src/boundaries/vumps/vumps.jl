@@ -83,7 +83,7 @@ function KrylovKit.initialize(network, alg::VUMPS)
 end
 
 function step!(problem::RenormalizationProblem{<:VUMPS})
-    return step!(problem.runtime, problem.network, problem.algorithm)
+    return step!(problem.runtime, problem.network, problem.alg)
 end
 
 function step!(
