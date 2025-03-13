@@ -101,10 +101,10 @@ step!(::Union{Never,Always}, problem) = step!(problem.runtime, problem.alg)
 function step!(dofpcm::AbstractBooleanDoFPCM, problem)
     if dofpcm(problem)
         @info "Doing FPCM..."
-        error = step!(problem.runtime, problem.algorithm.fpcm)
+        error = step!(problem.runtime, problem.alg.fpcm)
     else
         @info "Doing CTMRG..."
-        error = step!(problem.runtime, problem.algorithm.ctmrg)
+        error = step!(problem.runtime, problem.alg.ctmrg)
     end
     return error
 end
