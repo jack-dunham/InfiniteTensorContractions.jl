@@ -48,6 +48,7 @@ include("convergenceinfo.jl")
 include("utils.jl")
 include("callback.jl")
 
+include("compositetensor.jl")
 include("abstractunitcell.jl")
 include("abstractproblem.jl")
 include("networks.jl")
