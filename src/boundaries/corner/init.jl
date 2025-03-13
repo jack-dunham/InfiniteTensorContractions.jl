@@ -84,6 +84,7 @@ function initcorners(network, chi::S; randinit::Bool=false) where {S<:IndexSpace
                 tenp = rotate(site, -i + 1)
                 init_single_corner!(cout, tenp)
             end
+            normalize!(cout)
             return cout
         end
 
@@ -94,13 +95,19 @@ function initcorners(network, chi::S; randinit::Bool=false) where {S<:IndexSpace
 
     return randomize_if_zero!(corners)
 end
-function init_single_corner!(cout, ten::AbstractTensorMap)
+function init_single_corner!(cout, ten::AbstractTensorMap{T,S}) where {T,S}
     d = virtualspace(ten)
 
-    u1 = get_embedding_isometry(d[1], domain(cout)[1])
-    u2 = get_embedding_isometry(d[2], domain(cout)[2])
+    # u1 = get_embedding_isometry(d[1], domain(cout)[1])
+    u1 = id(d[1])
+
+    # u2 = get_embedding_isometry(d[2], domain(cout)[2])
+    u2 = id(d[2])
+
     u3 = get_removal_isometry(d[3])
     u4 = get_removal_isometry(d[4])
+
+    cout = similar(ten, one(S), d[1] * d[2])
 
     corner = init_single_corner!(cout, ten, u1, u2, u3, u4)
 
@@ -170,6 +177,8 @@ function initedges(network, chi::IndexSpace; randinit::Bool=false)
                 init_single_edge!(eout, tenp)
             end
 
+            normalize!(eout)
+
             return eout
         end
         return edges
@@ -183,10 +192,14 @@ end
 function init_single_edge!(eout, tenp)
     d = virtualspace(tenp)
 
-    u1 = get_embedding_isometry(d[1], domain(eout)[1])
+    # u1 = get_embedding_isometry(d[1], domain(eout)[1])
+    u1 = id(d[1])
     u2 = isometry(swap(d[2]), swap(d[2]))
-    u3 = get_embedding_isometry(d[3], domain(eout)[2])
+    # u3 = get_embedding_isometry(d[3], domain(eout)[2])
+    u3 = id(d[3])
     u4 = get_removal_isometry(d[4])
+
+    eout = similar(tenp, codomain(u2), d[1] * d[3])
 
     edge = init_single_edge!(eout, tenp, u1, u2, u3, u4)
 
@@ -260,8 +273,10 @@ function initerror(corners::Corners)
     # Permute into some form compatible with tsvd
     svals = map(corners) do corn
         broadcast(corn) do site
-            _, rv, _ = tsvd(permute(site, ((1,), (2,))))
-            return rv
+            s =  permute(site, ((1,), (2,)))
+            return TensorMap(rand, scalartype(s), codomain(s), domain(s))
+            # _, rv, _ = tsvd(permute(site, ((1,), (2,))))
+            # return rv
         end
     end
 
@@ -284,8 +299,8 @@ function randomize_if_zero!(corners_or_edges, type::Symbol)
 end
 function randomize_if_zero!(uc, type, i, ind)
     ten = uc[ind]
-    if ten ≈ zero(ten)
-        @info "Initial tensor $type$i ≈ 0 at site $(Tuple(ind)); using a random tensor instead."
+    if ten ≈ zero(ten) || isnan(norm(ten)) || isinf(norm(ten))
+        @info "Ill-conditioned tensor $type$i at site $(Tuple(ind)); using a random tensor instead."
         randnt!(ten)
     end
     return uc
